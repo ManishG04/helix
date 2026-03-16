@@ -1,0 +1,2359 @@
+openapi: 3.1.0
+info:
+  title: Helix - Project Management & Appointment System API
+  description: |
+    Backend API for Helix - A comprehensive project management and faculty appointment scheduling system.
+
+    ## Features
+    - **User Management**: Registration, authentication, and profile management for Students, Faculty, and Admins
+    - **Project Management**: Create, manage, and track projects through different phases
+    - **Team Management**: Create teams, manage members, and handle join codes
+    - **Appointment Scheduling**: Book appointments with faculty based on their availability
+    - **Faculty Availability**: Manual entry or OCR-based timetable upload for availability management
+
+    ## Authentication
+    All endpoints (except auth endpoints) require JWT Bearer token authentication.
+  version: 1.0.0
+  contact:
+    name: Helix Support
+    email: support@helix.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Local Development Server
+  - url: https://api.helix.com/v1
+    description: Production Server
+
+tags:
+  - name: Authentication
+    description: User authentication and registration endpoints
+  - name: Users
+    description: User profile management
+  - name: Projects
+    description: Project CRUD operations and management
+  - name: Teams
+    description: Team management and membership
+  - name: Appointments
+    description: Appointment scheduling and management
+  - name: Faculty Availability
+    description: Faculty availability slots management
+  - name: Timetable OCR
+    description: Timetable upload and OCR processing
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from login endpoint
+
+  schemas:
+    # Enums
+    UserRole:
+      type: string
+      enum: [STUDENT, FACULTY, ADMIN]
+      description: User role in the system
+
+    ProjectStatus:
+      type: string
+      enum: [PROPOSED, APPROVED, COMPLETED]
+      description: Current status of the project
+
+    ProjectPhase:
+      type: string
+      enum: [SYNOPSIS, MID_TERM, FINAL_EVALUATION]
+      nullable: true
+      description: Current phase of the project
+
+    AppointmentStatus:
+      type: string
+      enum: [PENDING, REJECTED, ACCEPTED]
+      description: Status of an appointment request
+
+    AvailabilityStatus:
+      type: string
+      enum: [PENDING_REVIEW, DISABLED, ACTIVE]
+      description: Status of faculty availability slot
+
+    AvailabilitySource:
+      type: string
+      enum: [MANUAL, OCR]
+      description: Source of the availability entry
+
+    DayOfWeek:
+      type: integer
+      enum: [0, 1, 2, 3, 4, 5, 6]
+      description: Day of week (0=Sunday, 1=Monday, ..., 6=Saturday)
+
+    # Base Models
+    UserBase:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "John Doe"
+        email:
+          type: string
+          format: email
+          example: "john.doe@university.edu"
+        role:
+          $ref: "#/components/schemas/UserRole"
+        academic_interests:
+          type: string
+          nullable: true
+          example: "Machine Learning, Data Science, Cloud Computing"
+
+    User:
+      allOf:
+        - $ref: "#/components/schemas/UserBase"
+        - type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+              example: "550e8400-e29b-41d4-a716-446655440000"
+            created_at:
+              type: string
+              format: date-time
+              example: "2026-02-15T10:30:00Z"
+
+    UserCreate:
+      allOf:
+        - $ref: "#/components/schemas/UserBase"
+        - type: object
+          required:
+            - name
+            - email
+            - password
+            - role
+          properties:
+            password:
+              type: string
+              format: password
+              minLength: 8
+              example: "SecurePass123!"
+
+    UserUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        academic_interests:
+          type: string
+          nullable: true
+
+    # Project Models
+    ProjectBase:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+          example: "AI-Powered Student Management System"
+        description:
+          type: string
+          nullable: true
+          example: "A comprehensive system for managing student records using AI"
+
+    Project:
+      allOf:
+        - $ref: "#/components/schemas/ProjectBase"
+        - type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            mentor_id:
+              type: string
+              format: uuid
+              nullable: true
+            status:
+              $ref: "#/components/schemas/ProjectStatus"
+            current_phase:
+              $ref: "#/components/schemas/ProjectPhase"
+            created_at:
+              type: string
+              format: date-time
+
+    ProjectCreate:
+      allOf:
+        - $ref: "#/components/schemas/ProjectBase"
+        - type: object
+          required:
+            - title
+          properties:
+            mentor_id:
+              type: string
+              format: uuid
+              nullable: true
+              description: Faculty ID to assign as mentor
+
+    ProjectUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 500
+        description:
+          type: string
+          nullable: true
+        mentor_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: "#/components/schemas/ProjectStatus"
+        current_phase:
+          $ref: "#/components/schemas/ProjectPhase"
+
+    # Team Models
+    TeamBase:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: "Team Alpha"
+
+    Team:
+      allOf:
+        - $ref: "#/components/schemas/TeamBase"
+        - type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            project_id:
+              type: string
+              format: uuid
+            join_code:
+              type: string
+              example: "ALPHA2026"
+
+    TeamCreate:
+      allOf:
+        - $ref: "#/components/schemas/TeamBase"
+        - type: object
+          required:
+            - name
+            - project_id
+          properties:
+            project_id:
+              type: string
+              format: uuid
+
+    TeamWithMembers:
+      allOf:
+        - $ref: "#/components/schemas/Team"
+        - type: object
+          properties:
+            members:
+              type: array
+              items:
+                $ref: "#/components/schemas/TeamMember"
+
+    # Team Member Models
+    TeamMember:
+      type: object
+      properties:
+        member_id:
+          type: string
+          format: uuid
+        team_id:
+          type: string
+          format: uuid
+        is_leader:
+          type: boolean
+          default: false
+        member:
+          $ref: "#/components/schemas/User"
+
+    TeamMemberAdd:
+      type: object
+      required:
+        - member_id
+      properties:
+        member_id:
+          type: string
+          format: uuid
+        is_leader:
+          type: boolean
+          default: false
+
+    JoinTeamRequest:
+      type: object
+      required:
+        - join_code
+      properties:
+        join_code:
+          type: string
+          example: "ALPHA2026"
+
+    # Faculty Availability Models
+    FacultyAvailabilityBase:
+      type: object
+      properties:
+        start_time:
+          type: string
+          format: time
+          example: "09:00:00"
+        end_time:
+          type: string
+          format: time
+          example: "10:00:00"
+        day_of_week:
+          $ref: "#/components/schemas/DayOfWeek"
+
+    FacultyAvailability:
+      allOf:
+        - $ref: "#/components/schemas/FacultyAvailabilityBase"
+        - type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            slot_duration:
+              type: integer
+              description: Duration in minutes (calculated from end_time - start_time)
+              example: 60
+            status:
+              $ref: "#/components/schemas/AvailabilityStatus"
+            source:
+              $ref: "#/components/schemas/AvailabilitySource"
+            created_at:
+              type: string
+              format: date-time
+            faculty_id:
+              type: string
+              format: uuid
+
+    FacultyAvailabilityCreate:
+      allOf:
+        - $ref: "#/components/schemas/FacultyAvailabilityBase"
+        - type: object
+          required:
+            - start_time
+            - end_time
+            - day_of_week
+
+    FacultyAvailabilityUpdate:
+      type: object
+      properties:
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        day_of_week:
+          $ref: "#/components/schemas/DayOfWeek"
+        status:
+          $ref: "#/components/schemas/AvailabilityStatus"
+
+    # Appointment Models
+    AppointmentBase:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+          example: "2026-02-20"
+        start_time:
+          type: string
+          format: time
+          example: "09:00:00"
+        end_time:
+          type: string
+          format: time
+          example: "09:30:00"
+        purpose:
+          type: string
+          nullable: true
+          example: "Discuss project progress and milestone review"
+
+    Appointment:
+      allOf:
+        - $ref: "#/components/schemas/AppointmentBase"
+        - type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            slot_id:
+              type: string
+              format: uuid
+            status:
+              $ref: "#/components/schemas/AppointmentStatus"
+            student_id:
+              type: string
+              format: uuid
+            faculty_id:
+              type: string
+              format: uuid
+            team_id:
+              type: string
+              format: uuid
+              nullable: true
+
+    AppointmentCreate:
+      type: object
+      required:
+        - slot_id
+        - date
+        - start_time
+        - end_time
+        - faculty_id
+      properties:
+        slot_id:
+          type: string
+          format: uuid
+          description: ID of the faculty availability slot
+        date:
+          type: string
+          format: date
+        start_time:
+          type: string
+          format: time
+        end_time:
+          type: string
+          format: time
+        purpose:
+          type: string
+          nullable: true
+        faculty_id:
+          type: string
+          format: uuid
+        team_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Optional team ID if booking on behalf of a team
+
+    AppointmentUpdate:
+      type: object
+      properties:
+        status:
+          $ref: "#/components/schemas/AppointmentStatus"
+        purpose:
+          type: string
+          nullable: true
+
+    AppointmentWithDetails:
+      allOf:
+        - $ref: "#/components/schemas/Appointment"
+        - type: object
+          properties:
+            student:
+              $ref: "#/components/schemas/User"
+            faculty:
+              $ref: "#/components/schemas/User"
+            team:
+              $ref: "#/components/schemas/Team"
+
+    # Timetable OCR Models
+    TimetableUploadResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Timetable uploaded successfully. Processing in background."
+        job_id:
+          type: string
+          format: uuid
+          description: Job ID to track OCR processing status
+        status:
+          type: string
+          enum: [QUEUED, PROCESSING, COMPLETED, FAILED]
+
+    OCRJobStatus:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [QUEUED, PROCESSING, COMPLETED, FAILED]
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        slots_extracted:
+          type: integer
+          nullable: true
+          description: Number of availability slots extracted
+        error_message:
+          type: string
+          nullable: true
+
+    # Auth Models
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        token_type:
+          type: string
+          example: "bearer"
+        expires_in:
+          type: integer
+          description: Token expiry time in seconds
+          example: 3600
+        user:
+          $ref: "#/components/schemas/User"
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+
+    PasswordChangeRequest:
+      type: object
+      required:
+        - current_password
+        - new_password
+      properties:
+        current_password:
+          type: string
+          format: password
+        new_password:
+          type: string
+          format: password
+          minLength: 8
+
+    # Common Response Models
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "Resource not found"
+        error_code:
+          type: string
+          example: "NOT_FOUND"
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  type: string
+              msg:
+                type: string
+              type:
+                type: string
+
+    PaginatedResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: {}
+        total:
+          type: integer
+        page:
+          type: integer
+        size:
+          type: integer
+        pages:
+          type: integer
+
+    SuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: "Operation completed successfully"
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      description: Page number (1-indexed)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    SizeParam:
+      name: size
+      in: query
+      description: Number of items per page
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    UserIdParam:
+      name: user_id
+      in: path
+      required: true
+      description: User UUID
+      schema:
+        type: string
+        format: uuid
+
+    ProjectIdParam:
+      name: project_id
+      in: path
+      required: true
+      description: Project UUID
+      schema:
+        type: string
+        format: uuid
+
+    TeamIdParam:
+      name: team_id
+      in: path
+      required: true
+      description: Team UUID
+      schema:
+        type: string
+        format: uuid
+
+    AppointmentIdParam:
+      name: appointment_id
+      in: path
+      required: true
+      description: Appointment UUID
+      schema:
+        type: string
+        format: uuid
+
+    AvailabilityIdParam:
+      name: availability_id
+      in: path
+      required: true
+      description: Faculty Availability UUID
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    UnauthorizedError:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            detail: "Could not validate credentials"
+            error_code: "UNAUTHORIZED"
+
+    ForbiddenError:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            detail: "Not enough permissions"
+            error_code: "FORBIDDEN"
+
+    NotFoundError:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            detail: "Resource not found"
+            error_code: "NOT_FOUND"
+
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationErrorResponse"
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ==================== AUTHENTICATION ====================
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: Create a new user account. Students can self-register, Faculty/Admin require admin approval.
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+      responses:
+        "201":
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Invalid request data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: "Email already registered"
+                error_code: "CONFLICT"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and receive JWT tokens
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: "Incorrect email or password"
+                error_code: "UNAUTHORIZED"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: Get a new access token using refresh token
+      operationId: refreshToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      responses:
+        "200":
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: Invalidate current session/tokens
+      operationId: logout
+      responses:
+        "200":
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+  /auth/change-password:
+    post:
+      tags:
+        - Authentication
+      summary: Change password
+      description: Change the current user's password
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordChangeRequest"
+      responses:
+        "200":
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Current password incorrect
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+  # ==================== USERS ====================
+  /users/me:
+    get:
+      tags:
+        - Users
+      summary: Get current user profile
+      description: Retrieve the authenticated user's profile information
+      operationId: getCurrentUser
+      responses:
+        "200":
+          description: User profile retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+    put:
+      tags:
+        - Users
+      summary: Update current user profile
+      description: Update the authenticated user's profile information
+      operationId: updateCurrentUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /users:
+    get:
+      tags:
+        - Users
+      summary: List all users
+      description: Get a paginated list of users. Admin only or filtered by role.
+      operationId: listUsers
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/SizeParam"
+        - name: role
+          in: query
+          description: Filter users by role
+          schema:
+            $ref: "#/components/schemas/UserRole"
+        - name: search
+          in: query
+          description: Search by name or email
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+
+  /users/{user_id}:
+    get:
+      tags:
+        - Users
+      summary: Get user by ID
+      description: Retrieve a specific user's profile
+      operationId: getUserById
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      responses:
+        "200":
+          description: User retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+    delete:
+      tags:
+        - Users
+      summary: Delete user
+      description: Delete a user account. Admin only.
+      operationId: deleteUser
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+      responses:
+        "204":
+          description: User deleted successfully
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  /users/faculty:
+    get:
+      tags:
+        - Users
+      summary: List faculty members
+      description: Get a list of all faculty members (for student use when searching mentors)
+      operationId: listFaculty
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/SizeParam"
+        - name: search
+          in: query
+          description: Search by name or academic interests
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Faculty list retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+  # ==================== PROJECTS ====================
+  /projects:
+    get:
+      tags:
+        - Projects
+      summary: List projects
+      description: Get a paginated list of projects. Students see their team's projects, Faculty see mentored projects, Admins see all.
+      operationId: listProjects
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/SizeParam"
+        - name: status
+          in: query
+          description: Filter by project status
+          schema:
+            $ref: "#/components/schemas/ProjectStatus"
+        - name: phase
+          in: query
+          description: Filter by current phase
+          schema:
+            $ref: "#/components/schemas/ProjectPhase"
+        - name: mentor_id
+          in: query
+          description: Filter by mentor ID
+          schema:
+            type: string
+            format: uuid
+        - name: search
+          in: query
+          description: Search by title or description
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Projects retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+    post:
+      tags:
+        - Projects
+      summary: Create a new project
+      description: Create a new project proposal. Typically done by team leader.
+      operationId: createProject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectCreate"
+      responses:
+        "201":
+          description: Project created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /projects/{project_id}:
+    get:
+      tags:
+        - Projects
+      summary: Get project details
+      description: Retrieve detailed information about a specific project
+      operationId: getProject
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdParam"
+      responses:
+        "200":
+          description: Project retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Project"
+                  - type: object
+                    properties:
+                      mentor:
+                        $ref: "#/components/schemas/User"
+                      team:
+                        $ref: "#/components/schemas/TeamWithMembers"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+    put:
+      tags:
+        - Projects
+      summary: Update project
+      description: Update project details. Team leaders can update title/description, Faculty can update status/phase.
+      operationId: updateProject
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdate"
+      responses:
+        "200":
+          description: Project updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+    delete:
+      tags:
+        - Projects
+      summary: Delete project
+      description: Delete a project. Only allowed for PROPOSED projects or by Admin.
+      operationId: deleteProject
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdParam"
+      responses:
+        "204":
+          description: Project deleted successfully
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  /projects/{project_id}/approve:
+    post:
+      tags:
+        - Projects
+      summary: Approve project
+      description: Approve a proposed project. Faculty/Admin only.
+      operationId: approveProject
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdParam"
+      responses:
+        "200":
+          description: Project approved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          description: Project already approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /projects/{project_id}/advance-phase:
+    post:
+      tags:
+        - Projects
+      summary: Advance project phase
+      description: Move project to the next phase. Faculty mentor only.
+      operationId: advanceProjectPhase
+      parameters:
+        - $ref: "#/components/parameters/ProjectIdParam"
+      responses:
+        "200":
+          description: Project phase advanced successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          description: Project already in final phase or not approved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== TEAMS ====================
+  /teams:
+    get:
+      tags:
+        - Teams
+      summary: List teams
+      description: Get a list of teams. Students see their teams, Faculty see teams of mentored projects.
+      operationId: listTeams
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/SizeParam"
+        - name: project_id
+          in: query
+          description: Filter by project ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Teams retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Team"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+    post:
+      tags:
+        - Teams
+      summary: Create a new team
+      description: Create a new team for a project. Creator becomes team leader.
+      operationId: createTeam
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamCreate"
+      responses:
+        "201":
+          description: Team created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "409":
+          description: Project already has a team
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /teams/{team_id}:
+    get:
+      tags:
+        - Teams
+      summary: Get team details
+      description: Retrieve detailed information about a team including members
+      operationId: getTeam
+      parameters:
+        - $ref: "#/components/parameters/TeamIdParam"
+      responses:
+        "200":
+          description: Team retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamWithMembers"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+    put:
+      tags:
+        - Teams
+      summary: Update team
+      description: Update team details. Team leader only.
+      operationId: updateTeam
+      parameters:
+        - $ref: "#/components/parameters/TeamIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamBase"
+      responses:
+        "200":
+          description: Team updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Team"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+    delete:
+      tags:
+        - Teams
+      summary: Delete team
+      description: Delete a team. Team leader or Admin only.
+      operationId: deleteTeam
+      parameters:
+        - $ref: "#/components/parameters/TeamIdParam"
+      responses:
+        "204":
+          description: Team deleted successfully
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  /teams/{team_id}/members:
+    get:
+      tags:
+        - Teams
+      summary: List team members
+      description: Get all members of a team
+      operationId: listTeamMembers
+      parameters:
+        - $ref: "#/components/parameters/TeamIdParam"
+      responses:
+        "200":
+          description: Team members retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeamMember"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+    post:
+      tags:
+        - Teams
+      summary: Add team member
+      description: Add a member to the team. Team leader only.
+      operationId: addTeamMember
+      parameters:
+        - $ref: "#/components/parameters/TeamIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamMemberAdd"
+      responses:
+        "201":
+          description: Member added successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamMember"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          description: User already in a team or team is full
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /teams/{team_id}/members/{user_id}:
+    delete:
+      tags:
+        - Teams
+      summary: Remove team member
+      description: Remove a member from the team. Team leader or self-removal only.
+      operationId: removeTeamMember
+      parameters:
+        - $ref: "#/components/parameters/TeamIdParam"
+        - $ref: "#/components/parameters/UserIdParam"
+      responses:
+        "204":
+          description: Member removed successfully
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  /teams/{team_id}/transfer-leadership:
+    post:
+      tags:
+        - Teams
+      summary: Transfer team leadership
+      description: Transfer team leadership to another member. Current leader only.
+      operationId: transferLeadership
+      parameters:
+        - $ref: "#/components/parameters/TeamIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - new_leader_id
+              properties:
+                new_leader_id:
+                  type: string
+                  format: uuid
+      responses:
+        "200":
+          description: Leadership transferred successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamWithMembers"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  /teams/join:
+    post:
+      tags:
+        - Teams
+      summary: Join team using code
+      description: Join a team using the unique join code
+      operationId: joinTeam
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JoinTeamRequest"
+      responses:
+        "200":
+          description: Joined team successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamWithMembers"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "404":
+          description: Invalid join code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Already in a team or team is full
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /teams/{team_id}/regenerate-code:
+    post:
+      tags:
+        - Teams
+      summary: Regenerate join code
+      description: Generate a new join code for the team. Team leader only.
+      operationId: regenerateJoinCode
+      parameters:
+        - $ref: "#/components/parameters/TeamIdParam"
+      responses:
+        "200":
+          description: Join code regenerated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  join_code:
+                    type: string
+                    example: "NEWALPHA2026"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  # ==================== FACULTY AVAILABILITY ====================
+  /faculty/availability:
+    get:
+      tags:
+        - Faculty Availability
+      summary: Get current user's availability
+      description: Get the authenticated faculty member's availability slots
+      operationId: getMyAvailability
+      parameters:
+        - name: status
+          in: query
+          description: Filter by slot status
+          schema:
+            $ref: "#/components/schemas/AvailabilityStatus"
+        - name: day_of_week
+          in: query
+          description: Filter by day of week
+          schema:
+            $ref: "#/components/schemas/DayOfWeek"
+      responses:
+        "200":
+          description: Availability slots retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FacultyAvailability"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          description: Not a faculty member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      tags:
+        - Faculty Availability
+      summary: Add availability slot
+      description: Manually add a new availability slot. Faculty only.
+      operationId: addAvailability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FacultyAvailabilityCreate"
+      responses:
+        "201":
+          description: Availability slot added successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacultyAvailability"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "409":
+          description: Overlapping slot exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /faculty/{user_id}/availability:
+    get:
+      tags:
+        - Faculty Availability
+      summary: Get faculty member's availability
+      description: Get a specific faculty member's active availability slots (for students to book appointments)
+      operationId: getFacultyAvailability
+      parameters:
+        - $ref: "#/components/parameters/UserIdParam"
+        - name: day_of_week
+          in: query
+          description: Filter by day of week
+          schema:
+            $ref: "#/components/schemas/DayOfWeek"
+      responses:
+        "200":
+          description: Availability slots retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FacultyAvailability"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  /faculty/availability/{availability_id}:
+    get:
+      tags:
+        - Faculty Availability
+      summary: Get availability slot details
+      description: Get details of a specific availability slot
+      operationId: getAvailabilitySlot
+      parameters:
+        - $ref: "#/components/parameters/AvailabilityIdParam"
+      responses:
+        "200":
+          description: Availability slot retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacultyAvailability"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+    put:
+      tags:
+        - Faculty Availability
+      summary: Update availability slot
+      description: Update an existing availability slot. Faculty owner only.
+      operationId: updateAvailability
+      parameters:
+        - $ref: "#/components/parameters/AvailabilityIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FacultyAvailabilityUpdate"
+      responses:
+        "200":
+          description: Availability slot updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FacultyAvailability"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          description: Overlapping slot exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - Faculty Availability
+      summary: Delete availability slot
+      description: Delete an availability slot. Faculty owner only. Cannot delete if appointments are scheduled.
+      operationId: deleteAvailability
+      parameters:
+        - $ref: "#/components/parameters/AvailabilityIdParam"
+      responses:
+        "204":
+          description: Availability slot deleted successfully
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          description: Cannot delete - appointments exist for this slot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /faculty/availability/bulk:
+    post:
+      tags:
+        - Faculty Availability
+      summary: Bulk add availability slots
+      description: Add multiple availability slots at once. Faculty only.
+      operationId: bulkAddAvailability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - slots
+              properties:
+                slots:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/FacultyAvailabilityCreate"
+      responses:
+        "201":
+          description: Availability slots added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: integer
+                    description: Number of slots created
+                  skipped:
+                    type: integer
+                    description: Number of slots skipped due to conflicts
+                  slots:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FacultyAvailability"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+
+    delete:
+      tags:
+        - Faculty Availability
+      summary: Bulk delete availability slots
+      description: Delete multiple availability slots. Faculty only.
+      operationId: bulkDeleteAvailability
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - slot_ids
+              properties:
+                slot_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        "200":
+          description: Availability slots deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: integer
+                  skipped:
+                    type: integer
+                    description: Slots skipped due to existing appointments
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+
+  # ==================== TIMETABLE OCR ====================
+  /faculty/timetable/upload:
+    post:
+      tags:
+        - Timetable OCR
+      summary: Upload timetable for OCR processing
+      description: |
+        Upload a timetable image for OCR processing to automatically extract availability slots.
+        The image is processed asynchronously via AWS Lambda and SQS.
+        Supported formats: PNG, JPG, JPEG, PDF (first page only)
+      operationId: uploadTimetable
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Timetable image file (PNG, JPG, JPEG, or PDF)
+      responses:
+        "202":
+          description: Timetable uploaded and queued for processing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TimetableUploadResponse"
+        "400":
+          description: Invalid file format or file too large
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+
+  /faculty/timetable/ocr-status/{job_id}:
+    get:
+      tags:
+        - Timetable OCR
+      summary: Get OCR processing status
+      description: Check the status of a timetable OCR processing job
+      operationId: getOCRStatus
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          description: OCR Job UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OCR job status retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OCRJobStatus"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  /faculty/timetable/ocr-results/{job_id}:
+    get:
+      tags:
+        - Timetable OCR
+      summary: Get OCR extracted slots for review
+      description: Get the availability slots extracted by OCR for review before confirmation
+      operationId: getOCRResults
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          description: OCR Job UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OCR results retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                  extracted_slots:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FacultyAvailabilityCreate"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          description: OCR processing not yet complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /faculty/timetable/ocr-confirm/{job_id}:
+    post:
+      tags:
+        - Timetable OCR
+      summary: Confirm OCR extracted slots
+      description: Confirm and save the OCR extracted availability slots (optionally with modifications)
+      operationId: confirmOCRResults
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          description: OCR Job UUID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - confirmed_slots
+              properties:
+                confirmed_slots:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/FacultyAvailabilityCreate"
+                  description: List of slots to save (can be modified from OCR results)
+      responses:
+        "201":
+          description: Availability slots confirmed and saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created:
+                    type: integer
+                  slots:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FacultyAvailability"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+  # ==================== APPOINTMENTS ====================
+  /appointments:
+    get:
+      tags:
+        - Appointments
+      summary: List appointments
+      description: |
+        Get a list of appointments.
+        - Students see their own appointments
+        - Faculty see appointments where they are the faculty
+        - Admins see all appointments
+      operationId: listAppointments
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/SizeParam"
+        - name: status
+          in: query
+          description: Filter by appointment status
+          schema:
+            $ref: "#/components/schemas/AppointmentStatus"
+        - name: date_from
+          in: query
+          description: Filter appointments from this date
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          description: Filter appointments until this date
+          schema:
+            type: string
+            format: date
+        - name: faculty_id
+          in: query
+          description: Filter by faculty ID
+          schema:
+            type: string
+            format: uuid
+        - name: team_id
+          in: query
+          description: Filter by team ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Appointments retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/AppointmentWithDetails"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+
+    post:
+      tags:
+        - Appointments
+      summary: Book an appointment
+      description: Book a new appointment with a faculty member
+      operationId: createAppointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentCreate"
+      responses:
+        "201":
+          description: Appointment booked successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "404":
+          description: Faculty or slot not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Time slot not available or conflicts with existing appointment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /appointments/{appointment_id}:
+    get:
+      tags:
+        - Appointments
+      summary: Get appointment details
+      description: Retrieve detailed information about a specific appointment
+      operationId: getAppointment
+      parameters:
+        - $ref: "#/components/parameters/AppointmentIdParam"
+      responses:
+        "200":
+          description: Appointment retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentWithDetails"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+    put:
+      tags:
+        - Appointments
+      summary: Update appointment
+      description: Update appointment details. Students can update purpose, Faculty can update status.
+      operationId: updateAppointment
+      parameters:
+        - $ref: "#/components/parameters/AppointmentIdParam"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentUpdate"
+      responses:
+        "200":
+          description: Appointment updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+
+    delete:
+      tags:
+        - Appointments
+      summary: Cancel appointment
+      description: Cancel a pending appointment. Only the student who booked or admin can cancel.
+      operationId: cancelAppointment
+      parameters:
+        - $ref: "#/components/parameters/AppointmentIdParam"
+      responses:
+        "204":
+          description: Appointment cancelled successfully
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          description: Cannot cancel - appointment already accepted or past
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /appointments/{appointment_id}/accept:
+    post:
+      tags:
+        - Appointments
+      summary: Accept appointment
+      description: Accept a pending appointment request. Faculty only.
+      operationId: acceptAppointment
+      parameters:
+        - $ref: "#/components/parameters/AppointmentIdParam"
+      responses:
+        "200":
+          description: Appointment accepted successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          description: Appointment already processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /appointments/{appointment_id}/reject:
+    post:
+      tags:
+        - Appointments
+      summary: Reject appointment
+      description: Reject a pending appointment request. Faculty only.
+      operationId: rejectAppointment
+      parameters:
+        - $ref: "#/components/parameters/AppointmentIdParam"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  description: Optional reason for rejection
+      responses:
+        "200":
+          description: Appointment rejected successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Appointment"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          description: Appointment already processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /appointments/available-slots:
+    get:
+      tags:
+        - Appointments
+      summary: Get available appointment slots
+      description: Get available time slots for a faculty member on a specific date
+      operationId: getAvailableSlots
+      parameters:
+        - name: faculty_id
+          in: query
+          required: true
+          description: Faculty member's user ID
+          schema:
+            type: string
+            format: uuid
+        - name: date
+          in: query
+          required: true
+          description: Date to check availability
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Available slots retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    slot_id:
+                      type: string
+                      format: uuid
+                    start_time:
+                      type: string
+                      format: time
+                    end_time:
+                      type: string
+                      format: time
+                    is_available:
+                      type: boolean
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "404":
+          description: Faculty not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ==================== ADMIN ENDPOINTS ====================
+  /admin/users:
+    get:
+      tags:
+        - Users
+      summary: Admin - List all users
+      description: Admin only - Get all users with advanced filtering
+      operationId: adminListUsers
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/SizeParam"
+        - name: role
+          in: query
+          schema:
+            $ref: "#/components/schemas/UserRole"
+        - name: created_after
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: created_before
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+
+  /admin/stats:
+    get:
+      tags:
+        - Users
+      summary: Admin - Get system statistics
+      description: Admin only - Get overall system statistics
+      operationId: getSystemStats
+      responses:
+        "200":
+          description: Statistics retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_users:
+                    type: integer
+                  users_by_role:
+                    type: object
+                    properties:
+                      STUDENT:
+                        type: integer
+                      FACULTY:
+                        type: integer
+                      ADMIN:
+                        type: integer
+                  total_projects:
+                    type: integer
+                  projects_by_status:
+                    type: object
+                    properties:
+                      PROPOSED:
+                        type: integer
+                      APPROVED:
+                        type: integer
+                      COMPLETED:
+                        type: integer
+                  total_teams:
+                    type: integer
+                  total_appointments:
+                    type: integer
+                  appointments_by_status:
+                    type: object
+                    properties:
+                      PENDING:
+                        type: integer
+                      ACCEPTED:
+                        type: integer
+                      REJECTED:
+                        type: integer
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+
+  # ==================== HEALTH CHECK ====================
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check if the API is running
+      operationId: healthCheck
+      security: []
+      responses:
+        "200":
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  timestamp:
+                    type: string
+                    format: date-time
