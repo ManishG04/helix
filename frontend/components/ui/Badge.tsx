@@ -1,6 +1,6 @@
 import React from "react";
 import { clsx } from "clsx";
-import type { ProjectStatus, AppointmentStatus } from "@/types";
+import type { ProjectStatus, AppointmentStatus, AvailabilityStatus, ProjectPhase } from "@/types";
 
 type BadgeVariant =
   | "default"
@@ -12,8 +12,8 @@ type BadgeVariant =
 
 interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant;
-  /** Convenience prop: auto-maps ProjectStatus / AppointmentStatus to a variant */
-  status?: ProjectStatus | AppointmentStatus;
+  /** Convenience prop: auto-maps status/phase values to a variant */
+  status?: ProjectStatus | AppointmentStatus | AvailabilityStatus | NonNullable<ProjectPhase>;
 }
 
 const variantClasses: Record<BadgeVariant, string> = {

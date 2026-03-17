@@ -39,7 +39,7 @@ export const useAuthStore = create<AuthState>()(
       setLoading: (isLoading) => set({ isLoading }),
     }),
     {
-      name: "helix-auth",
+      name: "helix-auth-v2",        // bumped from v1 to purge stale localStorage
       // Only persist the token; user is re-fetched by AuthProvider on mount
       partialize: (state) => ({ token: state.token }),
     }

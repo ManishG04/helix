@@ -101,14 +101,14 @@ export default function LoginPage() {
             Create one
           </Link>
         </p>
-
-        {/* Demo credentials – remove before production */}
-        <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-xs text-gray-500">
+{/* 
+        Demo credentials – remove before production */}
+        {/* <div className="mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-3 text-xs text-gray-500">
           <p className="mb-1 font-semibold text-gray-600">Demo accounts (password: password123)</p>
           <p>student@helix.dev &rarr; Student dashboard</p>
           <p>faculty@helix.dev &rarr; Faculty dashboard</p>
           <p>admin@helix.dev &rarr; Admin dashboard</p>
-        </div>
+        </div> */}
       </div>
     </div>
   );
