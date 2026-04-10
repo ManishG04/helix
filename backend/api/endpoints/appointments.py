@@ -58,7 +58,7 @@ def create_appointment(
             Appointment.start_time < app_in.end_time,
             Appointment.end_time > app_in.start_time,
             Appointment.status.in_(
-                [AppointmentStatus.PENDING, AppointmentStatus.APPROVED]
+                [AppointmentStatus.PENDING, AppointmentStatus.ACCEPTED]
             ),
         )
         .first()
@@ -79,7 +79,7 @@ def create_appointment(
             Appointment.start_time < app_in.end_time,
             Appointment.end_time > app_in.start_time,
             Appointment.status.in_(
-                [AppointmentStatus.PENDING, AppointmentStatus.APPROVED]
+                [AppointmentStatus.PENDING, AppointmentStatus.ACCEPTED]
             ),
         )
         .first()
@@ -129,8 +129,8 @@ def update_appointment_status(
 
     # Automatically reject other pending overlapping requests if this one gets approved
     if (
-        new_status == AppointmentStatus.APPROVED
-        and app.status != AppointmentStatus.APPROVED
+        new_status == AppointmentStatus.ACCEPTED
+        and app.status != AppointmentStatus.ACCEPTED
     ):
         overlapping_apps = (
             db.query(Appointment)
@@ -153,3 +153,30 @@ def update_appointment_status(
     db.refresh(app)
 
     return app
+
+
+@router.delete("/{appointment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_appointment(
+    appointment_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    app = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    # Only the student who booked it can delete it (or an admin)
+    if current_user.role == UserRole.STUDENT and app.student_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to delete this appointment"
+        )
+
+    # Faculty can only delete appointments associated with them
+    if current_user.role == UserRole.FACULTY and app.faculty_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to delete this appointment"
+        )
+
+    db.delete(app)
+    db.commit()
+    return None
