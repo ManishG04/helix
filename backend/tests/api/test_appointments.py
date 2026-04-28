@@ -130,10 +130,9 @@ def test_resolve_overlapping_appointments_on_approval(client, auth_headers):
 
     # Let's test the faculty *approving* app1
     app1_id = app1.json()["id"]
-    patch_resp = client.patch(
-        f"/api/v1/appointments/{app1_id}/status",
+    patch_resp = client.post(
+        f"/api/v1/appointments/{app1_id}/accept",
         headers=fac_headers,
-        params={"new_status": "ACCEPTED"},
     )
     assert patch_resp.status_code == 200
     assert patch_resp.json()["status"] == "ACCEPTED"
