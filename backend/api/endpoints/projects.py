@@ -16,7 +16,7 @@ from schemas.models import (
 router = APIRouter()
 
 
-@router.get("/", response_model=List[ProjectSchema])
+@router.get("", response_model=List[ProjectSchema])
 def list_projects(
     page: int = 1,
     size: int = 20,
@@ -36,7 +36,7 @@ def list_projects(
     return projects
 
 
-@router.post("/", response_model=ProjectSchema, status_code=201)
+@router.post("", response_model=ProjectSchema, status_code=201)
 def create_project(
     project_in: ProjectCreate,
     db: Session = Depends(get_db),

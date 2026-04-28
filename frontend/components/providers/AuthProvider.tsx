@@ -3,6 +3,7 @@
 import React, { useEffect } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { fetchCurrentUser } from "@/lib/auth";
+import { initializeOpenApi } from "@/lib/openapi";
 
 
 export default function AuthProvider({
@@ -11,6 +12,10 @@ export default function AuthProvider({
   children: React.ReactNode;
 }) {
   const { token, user, setUser, logout, setLoading } = useAuthStore();
+
+  useEffect(() => {
+    initializeOpenApi();
+  }, []);
 
   useEffect(() => {
     if (token && !user) {

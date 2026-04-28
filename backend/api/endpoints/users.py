@@ -13,7 +13,7 @@ def update_current_user():
     return {"message": "Profile updated successfully"}
 
 
-@router.get("/")
+@router.get("")
 def list_users(page: int = 1, size: int = 20, role: str = None, search: str = None):
     return {"message": "Users retrieved successfully", "items": []}
 

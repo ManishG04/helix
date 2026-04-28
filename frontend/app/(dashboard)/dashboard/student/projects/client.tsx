@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Plus, FolderKanban, Pencil, Trash2, X, Check } from "lucide-react";
+import { Plus, FolderKanban, Trash2, X } from "lucide-react";
 import { Button, Input, Badge } from "@/components/ui";
-import { ProjectsService, ProjectStatus, ProjectPhase } from "@/src/api";
-import type { Project, ProjectCreate, PaginatedResponse } from "@/src/api";
+import { ProjectsService, ProjectStatus } from "@/src/api";
+import type { Project, ProjectCreate } from "@/src/api";
 
 // ─── Create Project Modal ─────────────────────────────────────────────────────
 
@@ -30,17 +30,7 @@ function CreateProjectModal({
       const res = await ProjectsService.createProject(payload);
       onCreate(res);
     } catch {
-      // Mock fallback
-      const mock: Project = {
-        id: crypto.randomUUID(),
-        title: title.trim(),
-        description: description.trim() || null,
-        mentor_id: null,
-        status: ProjectStatus.PROPOSED,
-        current_phase: undefined,
-        created_at: new Date().toISOString(),
-      };
-      onCreate(mock);
+      setError("Failed to create project.");
     } finally {
       setLoading(false);
     }
@@ -105,7 +95,10 @@ function ProjectRow({
       if (project.id) {
         await ProjectsService.deleteProject(project.id);
       }
-    } catch { /* allow mock */ }
+    } catch {
+      setDeleting(false);
+      return;
+    }
     if (project.id) onDelete(project.id);
   };
 
@@ -140,27 +133,6 @@ function ProjectRow({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-const MOCK_PROJECTS: Project[] = [
-  {
-    id: "p1",
-    title: "AI-Based Crop Disease Detection",
-    description: "Using CNNs to identify crop diseases from leaf images.",
-    mentor_id: "f1",
-    status: ProjectStatus.APPROVED,
-    current_phase: ProjectPhase.MID_TERM,
-    created_at: "2026-01-10T00:00:00Z",
-  },
-  {
-    id: "p2",
-    title: "Blockchain Supply Chain",
-    description: "Transparent supply chain tracking using Ethereum.",
-    mentor_id: null,
-    status: ProjectStatus.PROPOSED,
-    current_phase: undefined,
-    created_at: "2026-02-20T00:00:00Z",
-  },
-];
-
 export default function ProjectsClient() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -169,7 +141,7 @@ export default function ProjectsClient() {
   useEffect(() => {
     ProjectsService.listProjects()
       .then((res) => setProjects(res.items || []))
-      .catch(() => setProjects(MOCK_PROJECTS))
+      .catch(() => setProjects([]))
       .finally(() => setLoading(false));
   }, []);
 

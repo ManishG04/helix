@@ -3,51 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { ClipboardList, Check, X, Clock } from "lucide-react";
 import { Badge } from "@/components/ui";
-import { AppointmentsService, AppointmentStatus, UserRole } from "@/src/api";
-import type { AppointmentWithDetails, PaginatedResponse, User } from "@/src/api";
-
-const MOCK_REQUESTS: AppointmentWithDetails[] = [
-  {
-    id: "a3",
-    slot_id: "sl1",
-    student_id: "s1",
-    faculty_id: "f1",
-    team_id: null,
-    date: "2026-03-18",
-    start_time: "10:00:00",
-    end_time: "10:30:00",
-    purpose: "Discuss AI project progress and next milestones",
-    status: AppointmentStatus.PENDING,
-    student: {
-      id: "s1", name: "Alex Student", email: "student@helix.dev",
-      role: UserRole.STUDENT, academic_interests: null, created_at: "2026-01-01T00:00:00Z",
-    } as User,
-    faculty: {
-      id: "f1", name: "Dr. Anita Sharma", email: "faculty@helix.dev",
-      role: UserRole.FACULTY, academic_interests: "ML, Data Science", created_at: "2026-01-01T00:00:00Z",
-    } as User,
-  },
-  {
-    id: "a4",
-    slot_id: "sl2",
-    student_id: "s2",
-    faculty_id: "f1",
-    team_id: null,
-    date: "2026-03-20",
-    start_time: "14:00:00",
-    end_time: "14:30:00",
-    purpose: "Initial consultation",
-    status: AppointmentStatus.ACCEPTED,
-    student: {
-      id: "s2", name: "Jamie Lee", email: "jamie@helix.dev",
-      role: UserRole.STUDENT, academic_interests: null, created_at: "2026-01-01T00:00:00Z",
-    } as User,
-    faculty: {
-      id: "f1", name: "Dr. Anita Sharma", email: "faculty@helix.dev",
-      role: UserRole.FACULTY, academic_interests: "ML, Data Science", created_at: "2026-01-01T00:00:00Z",
-    } as User,
-  },
-];
+import { AppointmentsService, AppointmentStatus } from "@/src/api";
+import type { AppointmentWithDetails } from "@/src/api";
 
 // ─── Request Card ─────────────────────────────────────────────────────────────
 
@@ -69,7 +26,10 @@ function RequestCard({
       } else {
         await AppointmentsService.rejectAppointment(apt.id!);
       }
-    } catch { /* mock */ }
+    } catch {
+      if (status === AppointmentStatus.ACCEPTED) setAccepting(false); else setRejecting(false);
+      return;
+    }
     onUpdate(apt.id!, status);
     if (status === AppointmentStatus.ACCEPTED) setAccepting(false); else setRejecting(false);
   };
@@ -146,7 +106,7 @@ export default function RequestsClient() {
   useEffect(() => {
     AppointmentsService.listAppointments()
       .then((r) => setAppointments(r.items as AppointmentWithDetails[] || []))
-      .catch(() => setAppointments(MOCK_REQUESTS))
+      .catch(() => setAppointments([]))
       .finally(() => setLoading(false));
   }, []);
 

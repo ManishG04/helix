@@ -1,40 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { BookOpen, ChevronRight, ArrowRight } from "lucide-react";
+import { BookOpen, ArrowRight } from "lucide-react";
 import { Button, Badge } from "@/components/ui";
 import { ProjectsService, ProjectStatus, ProjectPhase } from "@/src/api";
-import type { Project, PaginatedResponse } from "@/src/api";
-
-const MOCK_PROJECTS: Project[] = [
-  {
-    id: "p1",
-    title: "AI-Based Crop Disease Detection",
-    description: "Using CNNs to identify crop diseases from leaf images in real-time.",
-    mentor_id: "f1",
-    status: ProjectStatus.APPROVED,
-    current_phase: ProjectPhase.MID_TERM,
-    created_at: "2026-02-10T00:00:00Z",
-  },
-  {
-    id: "p2",
-    title: "Smart Energy Management System",
-    description: "IoT-based system for optimising energy consumption in buildings.",
-    mentor_id: "f1",
-    status: ProjectStatus.APPROVED,
-    current_phase: ProjectPhase.SYNOPSIS,
-    created_at: "2026-02-15T00:00:00Z",
-  },
-  {
-    id: "p3",
-    title: "Natural Language Query Interface",
-    description: null,
-    mentor_id: "f1",
-    status: ProjectStatus.COMPLETED,
-    current_phase: ProjectPhase.FINAL_EVALUATION,
-    created_at: "2026-01-05T00:00:00Z",
-  },
-];
+import type { Project } from "@/src/api";
 
 const PHASE_ORDER = ["SYNOPSIS", "MID_TERM", "FINAL_EVALUATION"] as const;
 
@@ -63,7 +33,10 @@ function ProjectCard({
     setAdvancing(true);
     try {
       await ProjectsService.advanceProjectPhase(project.id!);
-    } catch { /* mock */ }
+    } catch {
+      setAdvancing(false);
+      return;
+    }
     onAdvance(project.id!);
     setAdvancing(false);
   };
@@ -145,7 +118,7 @@ export default function FacultyProjectsClient() {
   useEffect(() => {
     ProjectsService.listProjects()
       .then((r) => setProjects(r.items as Project[] || []))
-      .catch(() => setProjects(MOCK_PROJECTS))
+      .catch(() => setProjects([]))
       .finally(() => setLoading(false));
   }, []);
 

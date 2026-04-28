@@ -26,20 +26,9 @@ interface Stats {
   completedProjects: number;
   totalAppointments: number;
   pendingAppointments: number;
+  acceptedAppointments: number;
+  rejectedAppointments: number;
 }
-
-const MOCK_STATS: Stats = {
-  totalUsers: 42,
-  students: 35,
-  faculty: 6,
-  admins: 1,
-  totalProjects: 18,
-  proposedProjects: 5,
-  approvedProjects: 10,
-  completedProjects: 3,
-  totalAppointments: 87,
-  pendingAppointments: 12,
-};
 
 // ─── Stat bar ─────────────────────────────────────────────────────────────────
 
@@ -79,38 +68,34 @@ export default function SystemStatsClient() {
   const [recentUsers, setRecentUsers] = useState<User[]>([]);
 
   useEffect(() => {
-    Promise.allSettled([
+    Promise.all([
       UsersService.listUsers(1, 5),
       UsersService.getSystemStats(),
-    ]).then(([usersResult, statsResult]) => {
-      if (usersResult.status === "fulfilled") {
-        setRecentUsers(usersResult.value.items as User[] || []);
-      } else {
-        setRecentUsers([
-          { id: "s1", name: "Alex Student", email: "student@helix.dev", role: UserRole.STUDENT, academic_interests: null, created_at: "2026-02-15T00:00:00Z" } as any,
-          { id: "f1", name: "Dr. Anita Sharma", email: "faculty@helix.dev", role: UserRole.FACULTY, academic_interests: "ML", created_at: "2026-01-05T00:00:00Z" } as any,
-        ]);
-      }
-      if (statsResult.status === "fulfilled") {
-        const s = statsResult.value;
+    ])
+      .then(([usersResult, statsResult]) => {
+        setRecentUsers(usersResult.items as User[] || []);
         setStats({
-          totalUsers: s.total_users || 0,
-          students: s.users_by_role?.STUDENT || 0,
-          faculty: s.users_by_role?.FACULTY || 0,
-          admins: s.users_by_role?.ADMIN || 0,
-          totalProjects: s.total_projects || 0,
-          proposedProjects: s.projects_by_status?.PROPOSED || 0,
-          approvedProjects: s.projects_by_status?.APPROVED || 0,
-          completedProjects: s.projects_by_status?.COMPLETED || 0,
-          totalAppointments: s.total_appointments || 0,
-          pendingAppointments: s.appointments_by_status?.PENDING || 0,
+          totalUsers: statsResult.total_users || 0,
+          students: statsResult.users_by_role?.STUDENT || 0,
+          faculty: statsResult.users_by_role?.FACULTY || 0,
+          admins: statsResult.users_by_role?.ADMIN || 0,
+          totalProjects: statsResult.total_projects || 0,
+          proposedProjects: statsResult.projects_by_status?.PROPOSED || 0,
+          approvedProjects: statsResult.projects_by_status?.APPROVED || 0,
+          completedProjects: statsResult.projects_by_status?.COMPLETED || 0,
+          totalAppointments: statsResult.total_appointments || 0,
+          pendingAppointments: statsResult.appointments_by_status?.PENDING || 0,
+          acceptedAppointments: statsResult.appointments_by_status?.ACCEPTED || 0,
+          rejectedAppointments: statsResult.appointments_by_status?.REJECTED || 0,
         });
-      } else {
-        setStats(MOCK_STATS);
-      }
-    }).finally(() => {
-      setLoading(false);
-    });
+      })
+      .catch(() => {
+        setRecentUsers([]);
+        setStats(null);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   if (loading || !stats) {
@@ -200,13 +185,8 @@ export default function SystemStatsClient() {
           </div>
           <div className="flex flex-col gap-3">
             <StatBar label="Pending" value={stats.pendingAppointments} max={stats.totalAppointments} color="bg-yellow-400" />
-            <StatBar
-              label="Accepted"
-              value={stats.totalAppointments - stats.pendingAppointments - Math.round(stats.totalAppointments * 0.1)}
-              max={stats.totalAppointments}
-              color="bg-green-400"
-            />
-            <StatBar label="Rejected" value={Math.round(stats.totalAppointments * 0.1)} max={stats.totalAppointments} color="bg-red-300" />
+            <StatBar label="Accepted" value={stats.acceptedAppointments} max={stats.totalAppointments} color="bg-green-400" />
+            <StatBar label="Rejected" value={stats.rejectedAppointments} max={stats.totalAppointments} color="bg-red-300" />
           </div>
         </div>
 

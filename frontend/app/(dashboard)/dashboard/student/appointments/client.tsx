@@ -1,65 +1,17 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { CalendarCheck, CalendarPlus, X, Clock, User } from "lucide-react";
+import { CalendarCheck, CalendarPlus, X, Clock } from "lucide-react";
 import { Button, Input, Badge } from "@/components/ui";
 import { UsersService, FacultyAvailabilityService, AppointmentsService, UserRole, AppointmentStatus } from "@/src/api";
 import type {
   AppointmentWithDetails,
   FacultyAvailability,
   User as UserType,
-  PaginatedResponse,
   AppointmentCreate,
 } from "@/src/api";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-// ─── Mock data ────────────────────────────────────────────────────────────────
-
-const MOCK_APPOINTMENTS: AppointmentWithDetails[] = [
-  {
-    id: "a1",
-    slot_id: "sl1",
-    student_id: "s1",
-    faculty_id: "f1",
-    team_id: null,
-    date: "2026-03-18",
-    start_time: "10:00:00",
-    end_time: "10:30:00",
-    purpose: "Discuss project architecture",
-    status: AppointmentStatus.ACCEPTED,
-    student: {
-      id: "s1", name: "Alex Student", email: "student@helix.dev",
-      role: UserRole.STUDENT, academic_interests: null, created_at: "2026-01-01T00:00:00Z",
-    } as UserType,
-    faculty: {
-      id: "f1", name: "Dr. Anita Sharma", email: "faculty@helix.dev",
-      role: UserRole.FACULTY, academic_interests: "ML, Data Science", created_at: "2026-01-05T00:00:00Z",
-    } as UserType,
-    team: null as any,
-  },
-  {
-    id: "a2",
-    slot_id: "sl2",
-    student_id: "s1",
-    faculty_id: "f2",
-    team_id: null,
-    date: "2026-03-22",
-    start_time: "14:00:00",
-    end_time: "14:30:00",
-    purpose: null,
-    status: AppointmentStatus.PENDING,
-    student: {
-      id: "s1", name: "Alex Student", email: "student@helix.dev",
-      role: UserRole.STUDENT, academic_interests: null, created_at: "2026-01-01T00:00:00Z",
-    } as UserType,
-    faculty: {
-      id: "f2", name: "Prof. Ravi Kumar", email: "ravi.kumar@helix.dev",
-      role: UserRole.FACULTY, academic_interests: "Blockchain", created_at: "2026-01-08T00:00:00Z",
-    } as UserType,
-    team: null as any,
-  },
-];
 
 // ─── Book Appointment Modal ───────────────────────────────────────────────────
 
@@ -85,12 +37,7 @@ function BookModal({
   useEffect(() => {
     UsersService.listUsers(1, 20, UserRole.FACULTY, facultySearch || undefined)
       .then((r) => setFacultyList(r.items as UserType[] || []))
-      .catch(() =>
-        setFacultyList([
-          { id: "f1", name: "Dr. Anita Sharma", email: "anita.sharma@helix.dev", role: UserRole.FACULTY, academic_interests: "ML, Data Science", created_at: "" },
-          { id: "f2", name: "Prof. Ravi Kumar", email: "ravi.kumar@helix.dev", role: UserRole.FACULTY, academic_interests: "Blockchain", created_at: "" },
-        ])
-      );
+      .catch(() => setFacultyList([]));
   }, [facultySearch]);
 
   const selectFaculty = async (f: UserType) => {
@@ -126,23 +73,7 @@ function BookModal({
       const r = await AppointmentsService.createAppointment(payload);
       onBooked(r as unknown as AppointmentWithDetails);
     } catch {
-      // Mock fallback
-      const mock: AppointmentWithDetails = {
-        id: crypto.randomUUID(),
-        slot_id: selectedSlot.id,
-        student_id: "me",
-        faculty_id: selectedFaculty.id,
-        team_id: null,
-        date,
-        start_time: selectedSlot.start_time,
-        end_time: selectedSlot.end_time,
-        purpose: purpose || null,
-        status: AppointmentStatus.PENDING,
-        student: { id: "me", name: "Me", email: "", role: UserRole.STUDENT, academic_interests: null, created_at: "" } as UserType,
-        faculty: selectedFaculty,
-        team: null as any,
-      };
-      onBooked(mock);
+      setError("Failed to book appointment.");
     } finally {
       setLoading(false);
     }
@@ -281,7 +212,10 @@ function AppointmentRow({
     setCancelling(true);
     try {
       await AppointmentsService.cancelAppointment(apt.id!);
-    } catch { /* mock */ }
+    } catch {
+      setCancelling(false);
+      return;
+    }
     onCancel(apt.id!);
   };
 
@@ -334,7 +268,7 @@ export default function AppointmentsClient() {
   useEffect(() => {
     AppointmentsService.listAppointments()
       .then((r) => setAppointments(r.items as AppointmentWithDetails[] || []))
-      .catch(() => setAppointments(MOCK_APPOINTMENTS))
+      .catch(() => setAppointments([]))
       .finally(() => setLoading(false));
 
     // For booking modal

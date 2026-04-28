@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   Users,
   GraduationCap,
@@ -10,12 +10,8 @@ import {
 import StatCard from "@/components/ui/StatCard";
 import { Card, Badge } from "@/components/ui";
 import { useAuthStore } from "@/store/authStore";
-
-const PLACEHOLDER_RECENT_USERS = [
-  { name: "Arjun Mehta", email: "arjun@univ.edu", role: "STUDENT" as const, joined: "Mar 16, 2026" },
-  { name: "Dr. Anita Sharma", email: "anita@univ.edu", role: "FACULTY" as const, joined: "Mar 14, 2026" },
-  { name: "Priya Singh", email: "priya@univ.edu", role: "STUDENT" as const, joined: "Mar 12, 2026" },
-];
+import { AppointmentsService, ProjectsService, UserRole, UsersService } from "@/src/api";
+import type { User } from "@/src/api";
 
 const ROLE_BADGE: Record<string, "info" | "purple"> = {
   STUDENT: "info",
@@ -24,6 +20,59 @@ const ROLE_BADGE: Record<string, "info" | "purple"> = {
 
 export default function AdminDashboardClient() {
   const { user } = useAuthStore();
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<{
+    totalUsers: number;
+    facultyCount: number;
+    totalProjects: number;
+    totalAppointments: number;
+  }>({
+    totalUsers: 0,
+    facultyCount: 0,
+    totalProjects: 0,
+    totalAppointments: 0,
+  });
+  const [recentUsers, setRecentUsers] = useState<User[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDashboardData() {
+      setLoading(true);
+      try {
+        const [systemStats, usersRes, projectsRes, appointmentsRes] = await Promise.all([
+          UsersService.getSystemStats(),
+          UsersService.adminListUsers(1, 5),
+          ProjectsService.listProjects(1, 1),
+          AppointmentsService.listAppointments(1, 1),
+        ]);
+        if (!isMounted) return;
+        setStats({
+          totalUsers: systemStats.total_users || 0,
+          facultyCount: systemStats.users_by_role?.FACULTY || 0,
+          totalProjects: systemStats.total_projects ?? projectsRes.total ?? 0,
+          totalAppointments: systemStats.total_appointments ?? appointmentsRes.total ?? 0,
+        });
+        setRecentUsers(usersRes.items || []);
+      } catch {
+        if (!isMounted) return;
+        setStats({
+          totalUsers: 0,
+          facultyCount: 0,
+          totalProjects: 0,
+          totalAppointments: 0,
+        });
+        setRecentUsers([]);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    loadDashboardData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <div className="flex flex-col gap-6">
@@ -41,30 +90,29 @@ export default function AdminDashboardClient() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total Users"
-          value={124}
+          value={stats.totalUsers}
           icon={Users}
           iconColor="text-indigo-600"
           iconBg="bg-indigo-50"
-          trend="+3 this week"
+          trend={loading ? "Loading..." : undefined}
         />
         <StatCard
           label="Faculty Members"
-          value={18}
+          value={stats.facultyCount}
           icon={GraduationCap}
           iconColor="text-purple-600"
           iconBg="bg-purple-50"
         />
         <StatCard
           label="Active Projects"
-          value={37}
+          value={stats.totalProjects}
           icon={FolderKanban}
           iconColor="text-green-600"
           iconBg="bg-green-50"
-          trend="12 completed this month"
         />
         <StatCard
           label="Appointments (Today)"
-          value={9}
+          value={stats.totalAppointments}
           icon={CalendarCheck}
           iconColor="text-yellow-600"
           iconBg="bg-yellow-50"
@@ -75,21 +123,27 @@ export default function AdminDashboardClient() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Recent Registrations */}
         <Card title="Recent Registrations">
-          <ul className="flex flex-col gap-3">
-            {PLACEHOLDER_RECENT_USERS.map((u, i) => (
-              <li key={i} className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{u.name}</p>
-                  <p className="text-xs text-gray-500">
-                    {u.email} &middot; {u.joined}
-                  </p>
-                </div>
-                <Badge variant={ROLE_BADGE[u.role] ?? "default"}>
-                  {u.role}
-                </Badge>
-              </li>
-            ))}
-          </ul>
+          {loading ? (
+            <p className="text-sm text-gray-400">Loading users...</p>
+          ) : recentUsers.length === 0 ? (
+            <p className="text-sm text-gray-500">No registrations found.</p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {recentUsers.map((u) => (
+                <li key={u.id} className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{u.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {u.email} &middot; {u.created_at ? new Date(u.created_at).toLocaleDateString() : "Unknown"}
+                    </p>
+                  </div>
+                  <Badge variant={ROLE_BADGE[u.role || UserRole.STUDENT] ?? "default"}>
+                    {u.role}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
         {/* Quick Actions */}

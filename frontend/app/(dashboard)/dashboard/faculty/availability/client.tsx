@@ -9,42 +9,6 @@ import { AvailabilityStatus, AvailabilitySource } from "@/src/api";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-const MOCK_SLOTS: FacultyAvailability[] = [
-  {
-    id: "sl1",
-    faculty_id: "f1",
-    day_of_week: 1,
-    start_time: "09:00:00",
-    end_time: "10:00:00",
-    slot_duration: 60,
-    status: AvailabilityStatus.ACTIVE,
-    source: AvailabilitySource.MANUAL,
-    created_at: "2026-01-15T00:00:00Z",
-  },
-  {
-    id: "sl2",
-    faculty_id: "f1",
-    day_of_week: 3,
-    start_time: "14:00:00",
-    end_time: "15:00:00",
-    slot_duration: 60,
-    status: AvailabilityStatus.ACTIVE,
-    source: AvailabilitySource.MANUAL,
-    created_at: "2026-01-15T00:00:00Z",
-  },
-  {
-    id: "sl3",
-    faculty_id: "f1",
-    day_of_week: 5,
-    start_time: "11:00:00",
-    end_time: "11:30:00",
-    slot_duration: 30,
-    status: AvailabilityStatus.PENDING_REVIEW,
-    source: AvailabilitySource.OCR,
-    created_at: "2026-02-01T00:00:00Z",
-  },
-];
-
 // ─── Add Slot Modal ───────────────────────────────────────────────────────────
 
 function AddSlotModal({
@@ -80,21 +44,7 @@ function AddSlotModal({
         setLoading(false);
         return;
       }
-      // Mock fallback
-      const [sh, sm] = start.split(":").map(Number);
-      const [eh, em] = end.split(":").map(Number);
-      const mock: FacultyAvailability = {
-        id: crypto.randomUUID(),
-        faculty_id: "me",
-        day_of_week: day,
-        start_time: `${start}:00`,
-        end_time: `${end}:00`,
-        slot_duration: (eh * 60 + em) - (sh * 60 + sm),
-        status: AvailabilityStatus.ACTIVE,
-        source: AvailabilitySource.MANUAL,
-        created_at: new Date().toISOString(),
-      };
-      onAdded(mock);
+      setError(detail ?? "Failed to add slot.");
     } finally {
       setLoading(false);
     }
@@ -170,7 +120,10 @@ function SlotRow({
     setDeleting(true);
     try {
       await FacultyAvailabilityService.deleteAvailability(slot.id!);
-    } catch { /* allow mock */ }
+    } catch {
+      setDeleting(false);
+      return;
+    }
     onDelete(slot.id!);
   };
 
@@ -178,7 +131,10 @@ function SlotRow({
     setActivating(true);
     try {
       await FacultyAvailabilityService.updateAvailability(slot.id!, { status: AvailabilityStatus.ACTIVE });
-    } catch { /* allow mock */ }
+    } catch {
+      setActivating(false);
+      return;
+    }
     onActivate(slot.id!);
   };
 
@@ -229,7 +185,7 @@ export default function AvailabilityClient() {
   useEffect(() => {
     FacultyAvailabilityService.getMyAvailability()
       .then((r) => setSlots(r || []))
-      .catch(() => setSlots(MOCK_SLOTS))
+      .catch(() => setSlots([]))
       .finally(() => setLoading(false));
   }, []);
 
@@ -257,7 +213,7 @@ export default function AvailabilityClient() {
       await TimetableOcrService.uploadTimetable({ file: file as Blob });
       setUploadMsg("Timetable uploaded. OCR processing in background — slots will appear shortly.");
     } catch {
-      setUploadMsg("OCR upload unavailable in demo mode.");
+      setUploadMsg("Failed to upload timetable. Please try again.");
     } finally {
       setUploading(false);
       e.target.value = "";

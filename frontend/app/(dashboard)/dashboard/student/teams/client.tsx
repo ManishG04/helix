@@ -4,47 +4,8 @@ import React, { useState, useEffect } from "react";
 import { Plus, Users, Copy, Check, X, Crown, LogOut } from "lucide-react";
 import { Button, Input, Badge } from "@/components/ui";
 import { useAuthStore } from "@/store/authStore";
-import { TeamsService, UserRole } from "@/src/api";
-import type { TeamWithMembers, PaginatedResponse } from "@/src/api";
-
-// ─── Mock data ────────────────────────────────────────────────────────────────
-
-const MOCK_TEAMS: TeamWithMembers[] = [
-  {
-    id: "t1",
-    name: "Team Alpha",
-    project_id: "p1",
-    join_code: "ALPHA2026",
-    members: [
-      {
-        member_id: "s1",
-        team_id: "t1",
-        is_leader: true,
-        member: {
-          id: "s1",
-          name: "Alex Student",
-          email: "student@helix.dev",
-          role: UserRole.STUDENT,
-          academic_interests: null,
-          created_at: "2026-01-01T00:00:00Z",
-        },
-      },
-      {
-        member_id: "s2",
-        team_id: "t1",
-        is_leader: false,
-        member: {
-          id: "s2",
-          name: "Jamie Lee",
-          email: "jamie@helix.dev",
-          role: UserRole.STUDENT,
-          academic_interests: null,
-          created_at: "2026-01-01T00:00:00Z",
-        },
-      },
-    ],
-  },
-];
+import { TeamsService } from "@/src/api";
+import type { TeamWithMembers } from "@/src/api";
 
 // ─── Join Team Modal ──────────────────────────────────────────────────────────
 
@@ -135,7 +96,10 @@ function TeamCard({
     setLeaving(true);
     try {
       if (team.id) await TeamsService.removeTeamMember(team.id, currentUserId);
-    } catch { /* allow mock */ }
+    } catch {
+      setLeaving(false);
+      return;
+    }
     if (team.id) onLeave(team.id);
   };
 
@@ -207,7 +171,7 @@ export default function TeamsClient() {
   useEffect(() => {
     TeamsService.listTeams()
       .then((res) => setTeams(res.items as unknown as TeamWithMembers[] || []))
-      .catch(() => setTeams(MOCK_TEAMS))
+      .catch(() => setTeams([]))
       .finally(() => setLoading(false));
   }, []);
 

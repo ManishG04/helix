@@ -4,15 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Search, Trash2, Users } from "lucide-react";
 import { Input, Badge } from "@/components/ui";
 import { UsersService, UserRole } from "@/src/api";
-import type { User, PaginatedResponse } from "@/src/api";
-
-const MOCK_USERS: User[] = [
-  { id: "s1", name: "Alex Student", email: "student@helix.dev", role: UserRole.STUDENT, academic_interests: null, created_at: "2026-01-10T00:00:00Z" } as User,
-  { id: "f1", name: "Dr. Anita Sharma", email: "faculty@helix.dev", role: UserRole.FACULTY, academic_interests: "ML, Data Science", created_at: "2026-01-05T00:00:00Z" } as User,
-  { id: "a1", name: "Admin User", email: "admin@helix.dev", role: UserRole.ADMIN, academic_interests: null, created_at: "2026-01-01T00:00:00Z" } as User,
-  { id: "f2", name: "Prof. Ravi Kumar", email: "ravi.kumar@helix.dev", role: UserRole.FACULTY, academic_interests: "Blockchain, Distributed Systems", created_at: "2026-01-08T00:00:00Z" } as User,
-  { id: "s2", name: "Jamie Lee", email: "jamie@helix.dev", role: UserRole.STUDENT, academic_interests: null, created_at: "2026-02-15T00:00:00Z" } as User,
-];
+import type { User } from "@/src/api";
 
 const ROLE_COLORS: Record<UserRole, string> = {
   [UserRole.STUDENT]: "bg-blue-100 text-blue-700",
@@ -36,7 +28,10 @@ function UserRow({
     setDeleting(true);
     try {
       await UsersService.deleteUser(user.id!);
-    } catch { /* allow mock */ }
+    } catch {
+      setDeleting(false);
+      return;
+    }
     onDelete(user.id!);
   };
 
@@ -112,16 +107,8 @@ export default function ManageUsersClient() {
         setTotal(r.total || 0);
       })
       .catch(() => {
-        const filtered = MOCK_USERS.filter((u) => {
-          const matchRole = roleFilter === "ALL" || u.role === roleFilter;
-          const matchSearch =
-            !debouncedSearch ||
-            (u.name && u.name.toLowerCase().includes(debouncedSearch.toLowerCase())) ||
-            (u.email && u.email.toLowerCase().includes(debouncedSearch.toLowerCase()));
-          return matchRole && matchSearch;
-        });
-        setUsers(filtered);
-        setTotal(filtered.length);
+        setUsers([]);
+        setTotal(0);
       })
       .finally(() => setLoading(false));
   }, [debouncedSearch, roleFilter, page]);

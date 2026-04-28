@@ -8,13 +8,12 @@ import type {
   PasswordChangeRequest,
   SuccessResponse,
 } from "@/src/api";
-import { ApiError as OpenApiError } from "@/src/api/core/ApiError";
 
 export const TOKEN_KEY = "helix_token";
 const MOCK_USER_KEY = "helix_mock_user";
 
-// Always use mock when backend is unavailable; set to false once backend is up.
-const USE_MOCK_AUTH = process.env.NEXT_PUBLIC_AUTH_MODE !== "real";
+// Mock mode is opt-in only (set NEXT_PUBLIC_AUTH_MODE=mock).
+const USE_MOCK_AUTH = process.env.NEXT_PUBLIC_AUTH_MODE === "mock";
 
 function hasMockToken(): boolean {
   if (typeof window === "undefined") return false;
@@ -71,16 +70,7 @@ export async function login(payload: LoginRequest): Promise<TokenResponse> {
     return loginWithMock(payload);
   }
 
-  try {
-    const data = await AuthenticationService.login(payload);
-    return data;
-  } catch (error) {
-    // Fall back to mock if backend is unreachable 
-    if (!(error instanceof OpenApiError)) {
-      return loginWithMock(payload);
-    }
-    throw error;
-  }
+  return AuthenticationService.login(payload);
 }
 
 export async function register(payload: UserCreate): Promise<User> {

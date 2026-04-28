@@ -25,7 +25,7 @@ def generate_join_code(length=8):
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-@router.get("/", response_model=List[TeamSchema])
+@router.get("", response_model=List[TeamSchema])
 def list_teams(
     page: int = 1,
     size: int = 20,
@@ -41,7 +41,7 @@ def list_teams(
     return teams
 
 
-@router.post("/", response_model=TeamSchema, status_code=201)
+@router.post("", response_model=TeamSchema, status_code=201)
 def create_team(
     team_in: TeamCreate,
     db: Session = Depends(get_db),
