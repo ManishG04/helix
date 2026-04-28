@@ -7,7 +7,7 @@ import { Mail, Lock } from "lucide-react";
 import { Button, Input } from "@/components/ui";
 import { login } from "@/lib/auth";
 import { useAuthStore } from "@/store/authStore";
-import type { UserRole } from "@/types";
+import { UserRole } from "@/src/api";
 
 const ROLE_REDIRECT: Record<UserRole, string> = {
   STUDENT: "/dashboard/student",
@@ -31,9 +31,11 @@ export default function LoginPage() {
 
     try {
       const tokenData = await login({ email, password });
-      setToken(tokenData.access_token);
-      setUser(tokenData.user);
-      router.push(ROLE_REDIRECT[tokenData.user.role] ?? "/");
+      const token = tokenData.access_token!;
+      const user = tokenData.user!;
+      setToken(token);
+      setUser(user);
+      router.push(user.role ? ROLE_REDIRECT[user.role] : "/");
     } catch {
       setError("Invalid email or password. Please try again.");
     } finally {

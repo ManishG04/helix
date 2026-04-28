@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { ClipboardList, Check, X, Clock, User } from "lucide-react";
+import { ClipboardList, Check, X, Clock } from "lucide-react";
 import { Badge } from "@/components/ui";
-import api from "@/lib/api";
-import type { AppointmentWithDetails, PaginatedResponse } from "@/types";
+import { AppointmentsService, AppointmentStatus, UserRole } from "@/src/api";
+import type { AppointmentWithDetails, PaginatedResponse, User } from "@/src/api";
 
 const MOCK_REQUESTS: AppointmentWithDetails[] = [
   {
@@ -17,16 +17,15 @@ const MOCK_REQUESTS: AppointmentWithDetails[] = [
     start_time: "10:00:00",
     end_time: "10:30:00",
     purpose: "Discuss AI project progress and next milestones",
-    status: "PENDING",
+    status: AppointmentStatus.PENDING,
     student: {
       id: "s1", name: "Alex Student", email: "student@helix.dev",
-      role: "STUDENT", academic_interests: null, created_at: "2026-01-01T00:00:00Z",
-    },
+      role: UserRole.STUDENT, academic_interests: null, created_at: "2026-01-01T00:00:00Z",
+    } as User,
     faculty: {
       id: "f1", name: "Dr. Anita Sharma", email: "faculty@helix.dev",
-      role: "FACULTY", academic_interests: "ML, Data Science", created_at: "2026-01-01T00:00:00Z",
-    },
-    team: null,
+      role: UserRole.FACULTY, academic_interests: "ML, Data Science", created_at: "2026-01-01T00:00:00Z",
+    } as User,
   },
   {
     id: "a4",
@@ -38,16 +37,15 @@ const MOCK_REQUESTS: AppointmentWithDetails[] = [
     start_time: "14:00:00",
     end_time: "14:30:00",
     purpose: "Initial consultation",
-    status: "ACCEPTED",
+    status: AppointmentStatus.ACCEPTED,
     student: {
       id: "s2", name: "Jamie Lee", email: "jamie@helix.dev",
-      role: "STUDENT", academic_interests: null, created_at: "2026-01-01T00:00:00Z",
-    },
+      role: UserRole.STUDENT, academic_interests: null, created_at: "2026-01-01T00:00:00Z",
+    } as User,
     faculty: {
       id: "f1", name: "Dr. Anita Sharma", email: "faculty@helix.dev",
-      role: "FACULTY", academic_interests: "ML, Data Science", created_at: "2026-01-01T00:00:00Z",
-    },
-    team: null,
+      role: UserRole.FACULTY, academic_interests: "ML, Data Science", created_at: "2026-01-01T00:00:00Z",
+    } as User,
   },
 ];
 
@@ -58,18 +56,22 @@ function RequestCard({
   onUpdate,
 }: {
   apt: AppointmentWithDetails;
-  onUpdate: (id: string, status: "ACCEPTED" | "REJECTED") => void;
+  onUpdate: (id: string, status: AppointmentStatus.ACCEPTED | AppointmentStatus.REJECTED) => void;
 }) {
   const [accepting, setAccepting] = useState(false);
   const [rejecting, setRejecting] = useState(false);
 
-  const handleAction = async (status: "ACCEPTED" | "REJECTED") => {
-    if (status === "ACCEPTED") setAccepting(true); else setRejecting(true);
+  const handleAction = async (status: AppointmentStatus.ACCEPTED | AppointmentStatus.REJECTED) => {
+    if (status === AppointmentStatus.ACCEPTED) setAccepting(true); else setRejecting(true);
     try {
-      await api.put(`/appointments/${apt.id}`, { status });
+      if (status === AppointmentStatus.ACCEPTED) {
+        await AppointmentsService.acceptAppointment(apt.id!);
+      } else {
+        await AppointmentsService.rejectAppointment(apt.id!);
+      }
     } catch { /* mock */ }
-    onUpdate(apt.id, status);
-    if (status === "ACCEPTED") setAccepting(false); else setRejecting(false);
+    onUpdate(apt.id!, status);
+    if (status === AppointmentStatus.ACCEPTED) setAccepting(false); else setRejecting(false);
   };
 
   return (
@@ -78,20 +80,20 @@ function RequestCard({
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-semibold text-xs shrink-0">
-            {apt.student.name[0]?.toUpperCase()}
+            {apt.student?.name?.[0]?.toUpperCase()}
           </div>
           <div>
-            <p className="text-sm font-semibold text-gray-900">{apt.student.name}</p>
-            <p className="text-xs text-gray-400">{apt.student.email}</p>
+            <p className="text-sm font-semibold text-gray-900">{apt.student?.name}</p>
+            <p className="text-xs text-gray-400">{apt.student?.email}</p>
           </div>
         </div>
-        <Badge status={apt.status} />
+        <Badge status={apt.status ?? AppointmentStatus.PENDING} />
       </div>
 
       {/* Date / time */}
       <div className="flex items-center gap-1.5 text-xs text-gray-500">
         <Clock className="h-3.5 w-3.5" />
-        {apt.date} &middot; {apt.start_time.slice(0, 5)} – {apt.end_time.slice(0, 5)}
+        {apt.date} &middot; {apt.start_time?.slice(0, 5)} – {apt.end_time?.slice(0, 5)}
       </div>
 
       {/* Purpose */}
@@ -102,10 +104,10 @@ function RequestCard({
       )}
 
       {/* Actions */}
-      {apt.status === "PENDING" && (
+      {apt.status === AppointmentStatus.PENDING && (
         <div className="flex gap-2 pt-1">
           <button
-            onClick={() => handleAction("ACCEPTED")}
+            onClick={() => handleAction(AppointmentStatus.ACCEPTED)}
             disabled={accepting || rejecting}
             className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
           >
@@ -117,7 +119,7 @@ function RequestCard({
             Accept
           </button>
           <button
-            onClick={() => handleAction("REJECTED")}
+            onClick={() => handleAction(AppointmentStatus.REJECTED)}
             disabled={accepting || rejecting}
             className="flex items-center gap-1.5 rounded-lg border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
           >
@@ -139,24 +141,23 @@ function RequestCard({
 export default function RequestsClient() {
   const [appointments, setAppointments] = useState<AppointmentWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"ALL" | "PENDING" | "ACCEPTED" | "REJECTED">("ALL");
+  const [filter, setFilter] = useState<"ALL" | AppointmentStatus>("ALL");
 
   useEffect(() => {
-    api
-      .get<PaginatedResponse<AppointmentWithDetails>>("/appointments")
-      .then((r) => setAppointments(r.data.items))
+    AppointmentsService.listAppointments()
+      .then((r) => setAppointments(r.items as AppointmentWithDetails[] || []))
       .catch(() => setAppointments(MOCK_REQUESTS))
       .finally(() => setLoading(false));
   }, []);
 
-  const handleUpdate = (id: string, status: "ACCEPTED" | "REJECTED") => {
+  const handleUpdate = (id: string, status: AppointmentStatus.ACCEPTED | AppointmentStatus.REJECTED) => {
     setAppointments((prev) =>
       prev.map((a) => (a.id === id ? { ...a, status } : a))
     );
   };
 
   const filtered = filter === "ALL" ? appointments : appointments.filter((a) => a.status === filter);
-  const pendingCount = appointments.filter((a) => a.status === "PENDING").length;
+  const pendingCount = appointments.filter((a) => a.status === AppointmentStatus.PENDING).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -174,9 +175,8 @@ export default function RequestsClient() {
         </p>
       </div>
 
-      {/* Filter tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-        {(["ALL", "PENDING", "ACCEPTED", "REJECTED"] as const).map((f) => (
+        {(["ALL", AppointmentStatus.PENDING, AppointmentStatus.ACCEPTED, AppointmentStatus.REJECTED] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}

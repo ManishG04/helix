@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Search, Mail, BookOpen, Calendar } from "lucide-react";
 import { Input, Button, Badge } from "@/components/ui";
-import api from "@/lib/api";
-import type { User, FacultyAvailability, PaginatedResponse } from "@/types";
+import { UsersService, FacultyAvailabilityService, UserRole } from "@/src/api";
+import type { User, FacultyAvailability, PaginatedResponse } from "@/src/api";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -12,13 +12,14 @@ function FacultyCard({ faculty }: { faculty: User }) {
   const [slots, setSlots] = useState<FacultyAvailability[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const [booking, setBooking] = useState(false);
 
   const loadSlots = useCallback(async () => {
     if (slots.length > 0) { setExpanded(true); return; }
     setLoadingSlots(true);
     try {
-      const res = await api.get<FacultyAvailability[]>(`/faculty/${faculty.id}/availability`);
-      setSlots(res.data.filter((s) => s.status === "ACTIVE"));
+      const data = await FacultyAvailabilityService.getFacultyAvailability(faculty.id!);
+      setSlots(data.filter((s) => s.status === "ACTIVE"));
     } catch {
       setSlots([]);
     } finally {
@@ -32,10 +33,10 @@ function FacultyCard({ faculty }: { faculty: User }) {
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-semibold text-sm shrink-0">
-            {faculty.name[0]?.toUpperCase()}
+            {faculty.name?.[0]?.toUpperCase() || "?"}
           </div>
           <div>
-            <p className="text-sm font-semibold text-gray-900">{faculty.name}</p>
+            <p className="text-sm font-semibold text-gray-900">{faculty.name || "Unknown"}</p>
             <p className="text-xs text-gray-500 flex items-center gap-1">
               <Mail className="h-3 w-3" />
               {faculty.email}
@@ -74,9 +75,9 @@ function FacultyCard({ faculty }: { faculty: User }) {
                   key={slot.id}
                   className="flex items-center justify-between rounded-md bg-gray-50 px-3 py-1.5 text-xs text-gray-700"
                 >
-                  <span className="font-medium">{DAYS[slot.day_of_week]}</span>
+                  <span className="font-medium">{DAYS[slot.day_of_week ?? 0]}</span>
                   <span>
-                    {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)}
+                    {slot.start_time?.slice(0, 5)} – {slot.end_time?.slice(0, 5)}
                   </span>
                   <span className="text-gray-400">{slot.slot_duration} min</span>
                 </li>
@@ -110,48 +111,17 @@ export default function FindFacultyClient() {
 
   useEffect(() => {
     setLoading(true);
-    const params: Record<string, string | number> = { page, size: PAGE_SIZE };
-    if (debouncedSearch) params.search = debouncedSearch;
-
-    api
-      .get<PaginatedResponse<User>>("/users/faculty", { params })
+    
+    UsersService.listUsers(page, PAGE_SIZE, UserRole.FACULTY, debouncedSearch || undefined)
       .then((res) => {
-        setFaculty(res.data.items);
-        setTotal(res.data.total);
+        setFaculty(res.items as User[] || []);
+        setTotal(res.total || 0);
       })
       .catch(() => {
-        // Mock fallback
         const mock: User[] = [
-          {
-            id: "f1",
-            name: "Dr. Anita Sharma",
-            email: "anita.sharma@helix.dev",
-            role: "FACULTY" as const,
-            academic_interests: "Machine Learning, Data Science, Cloud Computing",
-            created_at: "2026-01-01T00:00:00Z",
-          },
-          {
-            id: "f2",
-            name: "Prof. Ravi Kumar",
-            email: "ravi.kumar@helix.dev",
-            role: "FACULTY" as const,
-            academic_interests: "Blockchain, Distributed Systems",
-            created_at: "2026-01-01T00:00:00Z",
-          },
-          {
-            id: "f3",
-            name: "Dr. Priya Menon",
-            email: "priya.menon@helix.dev",
-            role: "FACULTY" as const,
-            academic_interests: "Computer Vision, Robotics, Embedded Systems",
-            created_at: "2026-01-01T00:00:00Z",
-          },
-        ].filter(
-          (f) =>
-            !debouncedSearch ||
-            f.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-            (f.academic_interests ?? "").toLowerCase().includes(debouncedSearch.toLowerCase())
-        );
+          { id: "f1", name: "Dr. Anita Sharma", email: "faculty@helix.dev", role: UserRole.FACULTY, academic_interests: "Machine Learning, Computer Vision", created_at: "2026-01-05T00:00:00Z" } as User,
+          { id: "f2", name: "Prof. Ravi Kumar", email: "ravi.kumar@helix.dev", role: UserRole.FACULTY, academic_interests: "Blockchain, Distributed Systems", created_at: "2026-01-08T00:00:00Z" } as User,
+        ].filter((f) => !debouncedSearch || (f.name && f.name.toLowerCase().includes(debouncedSearch.toLowerCase())));
         setFaculty(mock);
         setTotal(mock.length);
       })

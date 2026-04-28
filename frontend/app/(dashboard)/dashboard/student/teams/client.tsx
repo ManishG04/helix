@@ -4,8 +4,8 @@ import React, { useState, useEffect } from "react";
 import { Plus, Users, Copy, Check, X, Crown, LogOut } from "lucide-react";
 import { Button, Input, Badge } from "@/components/ui";
 import { useAuthStore } from "@/store/authStore";
-import api from "@/lib/api";
-import type { TeamWithMembers, PaginatedResponse } from "@/types";
+import { TeamsService, UserRole } from "@/src/api";
+import type { TeamWithMembers, PaginatedResponse } from "@/src/api";
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
@@ -24,7 +24,7 @@ const MOCK_TEAMS: TeamWithMembers[] = [
           id: "s1",
           name: "Alex Student",
           email: "student@helix.dev",
-          role: "STUDENT",
+          role: UserRole.STUDENT,
           academic_interests: null,
           created_at: "2026-01-01T00:00:00Z",
         },
@@ -37,7 +37,7 @@ const MOCK_TEAMS: TeamWithMembers[] = [
           id: "s2",
           name: "Jamie Lee",
           email: "jamie@helix.dev",
-          role: "STUDENT",
+          role: UserRole.STUDENT,
           academic_interests: null,
           created_at: "2026-01-01T00:00:00Z",
         },
@@ -65,10 +65,10 @@ function JoinTeamModal({
     setLoading(true);
     setError("");
     try {
-      const res = await api.post<TeamWithMembers>("/teams/join", { join_code: code.trim().toUpperCase() });
-      onJoined(res.data);
-    } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      const res = await TeamsService.joinTeam({ join_code: code.trim().toUpperCase() });
+      onJoined(res);
+    } catch (err: any) {
+      const detail = err.body?.detail;
       setError(detail ?? "Invalid join code or you are already in a team.");
     } finally {
       setLoading(false);
@@ -120,9 +120,10 @@ function TeamCard({
   const [copied, setCopied] = useState(false);
   const [leaving, setLeaving] = useState(false);
 
-  const isLeader = team.members.find((m) => m.member_id === currentUserId)?.is_leader ?? false;
+  const isLeader = team.members?.find((m) => m.member_id === currentUserId)?.is_leader ?? false;
 
   const copyCode = () => {
+    if (!team.join_code) return;
     navigator.clipboard.writeText(team.join_code).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -133,9 +134,9 @@ function TeamCard({
     if (!confirm("Leave this team?")) return;
     setLeaving(true);
     try {
-      await api.delete(`/teams/${team.id}/members/${currentUserId}`);
+      if (team.id) await TeamsService.removeTeamMember(team.id, currentUserId);
     } catch { /* allow mock */ }
-    onLeave(team.id);
+    if (team.id) onLeave(team.id);
   };
 
   return (
@@ -144,7 +145,7 @@ function TeamCard({
         <div>
           <p className="text-sm font-semibold text-gray-900">{team.name}</p>
           <p className="text-xs text-gray-400 mt-0.5">
-            {team.members.length} member{team.members.length !== 1 ? "s" : ""}
+            {team.members?.length ?? 0} member{(team.members?.length ?? 0) !== 1 ? "s" : ""}
           </p>
         </div>
         {isLeader && <Badge variant="purple">Leader</Badge>}
@@ -152,12 +153,12 @@ function TeamCard({
 
       {/* Members */}
       <ul className="flex flex-col gap-2">
-        {team.members.map((m) => (
+        {team.members?.map((m) => (
           <li key={m.member_id} className="flex items-center gap-2">
             <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-semibold shrink-0">
-              {m.member.name[0]?.toUpperCase()}
+              {m.member?.name?.[0]?.toUpperCase()}
             </div>
-            <span className="text-sm text-gray-700 flex-1 truncate">{m.member.name}</span>
+            <span className="text-sm text-gray-700 flex-1 truncate">{m.member?.name}</span>
             {m.is_leader && (
               <span title="Team leader">
                 <Crown className="h-3.5 w-3.5 text-yellow-500" />
@@ -167,7 +168,6 @@ function TeamCard({
         ))}
       </ul>
 
-      {/* Join code */}
       <div className="flex items-center gap-2 rounded-md bg-gray-50 px-3 py-2">
         <span className="text-xs text-gray-500">Join code:</span>
         <code className="text-xs font-mono font-semibold text-indigo-700 flex-1">{team.join_code}</code>
@@ -205,9 +205,8 @@ export default function TeamsClient() {
   const [showJoin, setShowJoin] = useState(false);
 
   useEffect(() => {
-    api
-      .get<PaginatedResponse<TeamWithMembers>>("/teams")
-      .then((res) => setTeams(res.data.items))
+    TeamsService.listTeams()
+      .then((res) => setTeams(res.items as unknown as TeamWithMembers[] || []))
       .catch(() => setTeams(MOCK_TEAMS))
       .finally(() => setLoading(false));
   }, []);

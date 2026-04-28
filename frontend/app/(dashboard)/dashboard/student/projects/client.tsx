@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { Plus, FolderKanban, Pencil, Trash2, X, Check } from "lucide-react";
 import { Button, Input, Badge } from "@/components/ui";
-import api from "@/lib/api";
-import type { Project, ProjectCreate, PaginatedResponse } from "@/types";
+import { ProjectsService, ProjectStatus, ProjectPhase } from "@/src/api";
+import type { Project, ProjectCreate, PaginatedResponse } from "@/src/api";
 
 // ─── Create Project Modal ─────────────────────────────────────────────────────
 
@@ -27,8 +27,8 @@ function CreateProjectModal({
     setError("");
     try {
       const payload: ProjectCreate = { title: title.trim(), description: description.trim() || null };
-      const res = await api.post<Project>("/projects", payload);
-      onCreate(res.data);
+      const res = await ProjectsService.createProject(payload);
+      onCreate(res);
     } catch {
       // Mock fallback
       const mock: Project = {
@@ -36,8 +36,8 @@ function CreateProjectModal({
         title: title.trim(),
         description: description.trim() || null,
         mentor_id: null,
-        status: "PROPOSED",
-        current_phase: null,
+        status: ProjectStatus.PROPOSED,
+        current_phase: undefined,
         created_at: new Date().toISOString(),
       };
       onCreate(mock);
@@ -102,9 +102,11 @@ function ProjectRow({
     if (!confirm("Delete this project? This cannot be undone.")) return;
     setDeleting(true);
     try {
-      await api.delete(`/projects/${project.id}`);
+      if (project.id) {
+        await ProjectsService.deleteProject(project.id);
+      }
     } catch { /* allow mock */ }
-    onDelete(project.id);
+    if (project.id) onDelete(project.id);
   };
 
   return (
@@ -118,11 +120,11 @@ function ProjectRow({
           <Badge status={project.status} />
           {project.current_phase && <Badge status={project.current_phase} />}
           <span className="text-xs text-gray-400">
-            Created {new Date(project.created_at).toLocaleDateString()}
+            Created {project.created_at ? new Date(project.created_at).toLocaleDateString() : "Unknown"}
           </span>
         </div>
       </div>
-      {project.status === "PROPOSED" && (
+      {project.status === ProjectStatus.PROPOSED && (
         <button
           onClick={handleDelete}
           disabled={deleting}
@@ -144,8 +146,8 @@ const MOCK_PROJECTS: Project[] = [
     title: "AI-Based Crop Disease Detection",
     description: "Using CNNs to identify crop diseases from leaf images.",
     mentor_id: "f1",
-    status: "APPROVED",
-    current_phase: "MID_TERM",
+    status: ProjectStatus.APPROVED,
+    current_phase: ProjectPhase.MID_TERM,
     created_at: "2026-01-10T00:00:00Z",
   },
   {
@@ -153,8 +155,8 @@ const MOCK_PROJECTS: Project[] = [
     title: "Blockchain Supply Chain",
     description: "Transparent supply chain tracking using Ethereum.",
     mentor_id: null,
-    status: "PROPOSED",
-    current_phase: null,
+    status: ProjectStatus.PROPOSED,
+    current_phase: undefined,
     created_at: "2026-02-20T00:00:00Z",
   },
 ];
@@ -165,9 +167,8 @@ export default function ProjectsClient() {
   const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
-    api
-      .get<PaginatedResponse<Project>>("/projects")
-      .then((res) => setProjects(res.data.items))
+    ProjectsService.listProjects()
+      .then((res) => setProjects(res.items || []))
       .catch(() => setProjects(MOCK_PROJECTS))
       .finally(() => setLoading(false));
   }, []);

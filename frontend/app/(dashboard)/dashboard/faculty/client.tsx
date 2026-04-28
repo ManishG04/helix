@@ -10,15 +10,16 @@ import {
 import StatCard from "@/components/ui/StatCard";
 import { Card, Badge } from "@/components/ui";
 import { useAuthStore } from "@/store/authStore";
+import { AppointmentStatus, ProjectStatus, ProjectPhase } from "@/src/api";
 
 const PLACEHOLDER_REQUESTS = [
-  { student: "Arjun Mehta", topic: "ML Research Collaboration", date: "Mar 17, 2026", status: "PENDING" as const },
-  { student: "Priya Singh", topic: "Web3 Project Guidance", date: "Mar 15, 2026", status: "ACCEPTED" as const },
+  { student: "Arjun Mehta", topic: "ML Research Collaboration", date: "Mar 17, 2026", status: AppointmentStatus.PENDING },
+  { student: "Priya Singh", topic: "Web3 Project Guidance", date: "Mar 15, 2026", status: AppointmentStatus.ACCEPTED },
 ];
 
 const PLACEHOLDER_PROJECTS = [
-  { title: "AI-Based Crop Disease Detection", students: 3, status: "APPROVED" as const, phase: "MID_TERM" as const },
-  { title: "Smart Grid Optimization", students: 2, status: "PROPOSED" as const, phase: "SYNOPSIS" as const },
+  { title: "AI-Based Crop Disease Detection", students: 3, status: ProjectStatus.APPROVED, phase: ProjectPhase.MID_TERM },
+  { title: "Smart Grid Optimization", students: 2, status: ProjectStatus.PROPOSED, phase: ProjectPhase.SYNOPSIS },
 ];
 
 export default function FacultyDashboardClient() {
@@ -97,7 +98,7 @@ export default function FacultyDashboardClient() {
               <li key={i} className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-900">{proj.title}</p>
-                  <p className="text-xs text-gray-500">{proj.students} students &middot; Phase: {proj.phase.replace("_", " ")}</p>
+                  <p className="text-xs text-gray-500">{proj.students} students &middot; Phase: {String(proj.phase).replace("_", " ")}</p>
                 </div>
                 <Badge status={proj.status} />
               </li>

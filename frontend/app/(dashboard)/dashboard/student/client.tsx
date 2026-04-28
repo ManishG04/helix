@@ -10,15 +10,16 @@ import {
 import StatCard from "@/components/ui/StatCard";
 import { Card, Badge } from "@/components/ui";
 import { useAuthStore } from "@/store/authStore";
+import { AppointmentStatus, ProjectStatus } from "@/src/api";
 
 const PLACEHOLDER_APPOINTMENTS = [
-  { faculty: "Dr. Anita Sharma", date: "Mar 18, 2026", time: "10:00 AM", status: "ACCEPTED" as const },
-  { faculty: "Prof. Ravi Kumar", date: "Mar 20, 2026", time: "2:00 PM", status: "PENDING" as const },
+  { faculty: "Dr. Anita Sharma", date: "Mar 18, 2026", time: "10:00 AM", status: AppointmentStatus.ACCEPTED },
+  { faculty: "Prof. Ravi Kumar", date: "Mar 20, 2026", time: "2:00 PM", status: AppointmentStatus.PENDING },
 ];
 
 const PLACEHOLDER_PROJECTS = [
-  { title: "AI-Based Crop Disease Detection", status: "APPROVED" as const },
-  { title: "Blockchain Supply Chain", status: "PROPOSED" as const },
+  { title: "AI-Based Crop Disease Detection", status: ProjectStatus.APPROVED },
+  { title: "Blockchain Supply Chain", status: ProjectStatus.PROPOSED },
 ];
 
 export default function StudentDashboardClient() {

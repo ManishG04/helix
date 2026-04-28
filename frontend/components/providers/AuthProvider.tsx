@@ -4,11 +4,7 @@ import React, { useEffect } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { fetchCurrentUser } from "@/lib/auth";
 
-/**
- * Mount this once in the root layout.
- * On every page load it checks for a stored token and, if found,
- * re-fetches the current user profile to populate the store.
- */
+
 export default function AuthProvider({
   children,
 }: {

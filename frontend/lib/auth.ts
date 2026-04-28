@@ -1,4 +1,5 @@
-import api from "./api";
+import { AuthenticationService, UsersService } from "@/src/api";
+import { UserRole } from "@/src/api";
 import type {
   LoginRequest,
   TokenResponse,
@@ -6,8 +7,8 @@ import type {
   UserCreate,
   PasswordChangeRequest,
   SuccessResponse,
-} from "@/types";
-import { AxiosError } from "axios";
+} from "@/src/api";
+import { ApiError as OpenApiError } from "@/src/api/core/ApiError";
 
 export const TOKEN_KEY = "helix_token";
 const MOCK_USER_KEY = "helix_mock_user";
@@ -25,7 +26,7 @@ function shouldUseMockNow(): boolean {
   return USE_MOCK_AUTH || hasMockToken();
 }
 
-function buildMockUser(role: User["role"], email: string, name: string): User {
+function buildMockUser(role: UserRole, email: string, name: string): User {
   const now = new Date().toISOString();
   return {
     id: `mock-${role.toLowerCase()}-id`,
@@ -39,20 +40,7 @@ function buildMockUser(role: User["role"], email: string, name: string): User {
 
 /** Seed accounts available in mock mode */
 function getSeedMockUsers(): Record<string, { password: string; user: User }> {
-  return {
-    "student@helix.dev": {
-      password: "password123",
-      user: buildMockUser("STUDENT", "student@helix.dev", "Demo Student"),
-    },
-    "faculty@helix.dev": {
-      password: "password123",
-      user: buildMockUser("FACULTY", "faculty@helix.dev", "Dr. Demo Faculty"),
-    },
-    "admin@helix.dev": {
-      password: "password123",
-      user: buildMockUser("ADMIN", "admin@helix.dev", "Demo Admin"),
-    },
-  };
+  return {};
 }
 
 function loginWithMock(payload: LoginRequest): TokenResponse {
@@ -69,7 +57,7 @@ function loginWithMock(payload: LoginRequest): TokenResponse {
   }
 
   return {
-    access_token: `mock-token-${matched.user.role.toLowerCase()}`,
+    access_token: `mock-token-${(matched.user.role || "student").toLowerCase()}`,
     token_type: "bearer",
     expires_in: 3600,
     user: matched.user,
@@ -78,35 +66,31 @@ function loginWithMock(payload: LoginRequest): TokenResponse {
 
 // ─── Auth endpoints ───────────────────────────────────────────────────────────
 
-/** POST /auth/login – sends JSON body, response contains embedded user */
 export async function login(payload: LoginRequest): Promise<TokenResponse> {
   if (shouldUseMockNow()) {
     return loginWithMock(payload);
   }
 
   try {
-    const { data } = await api.post<TokenResponse>("/auth/login", payload);
+    const data = await AuthenticationService.login(payload);
     return data;
   } catch (error) {
-    // Fall back to mock if backend is unreachable (no response at all)
-    if (error instanceof AxiosError && !error.response) {
+    // Fall back to mock if backend is unreachable 
+    if (!(error instanceof OpenApiError)) {
       return loginWithMock(payload);
     }
     throw error;
   }
 }
 
-/** POST /auth/register */
 export async function register(payload: UserCreate): Promise<User> {
   if (USE_MOCK_AUTH) {
-    return buildMockUser(payload.role, payload.email, payload.name);
+    return buildMockUser(payload.role || UserRole.STUDENT, payload.email ?? "", payload.name ?? "");
   }
 
-  const { data } = await api.post<User>("/auth/register", payload);
-  return data;
+  return AuthenticationService.register(payload);
 }
 
-/** GET /users/me – used on re-hydration when only token is persisted */
 export async function fetchCurrentUser(): Promise<User> {
   if (shouldUseMockNow()) {
     if (typeof window === "undefined") {
@@ -117,26 +101,18 @@ export async function fetchCurrentUser(): Promise<User> {
     return JSON.parse(rawUser) as User;
   }
 
-  const { data } = await api.get<User>("/users/me");
-  return data;
+  return UsersService.getCurrentUser();
 }
 
-/** POST /auth/logout */
 export async function logoutApi(): Promise<SuccessResponse> {
   if (shouldUseMockNow()) return { message: "Logged out" };
-  const { data } = await api.post<SuccessResponse>("/auth/logout");
-  return data;
+  return AuthenticationService.logout();
 }
 
-/** POST /auth/change-password */
 export async function changePassword(
   payload: PasswordChangeRequest
 ): Promise<SuccessResponse> {
-  const { data } = await api.post<SuccessResponse>(
-    "/auth/change-password",
-    payload
-  );
-  return data;
+  return AuthenticationService.changePassword(payload);
 }
 
 // ─── Token helpers ────────────────────────────────────────────────────────────

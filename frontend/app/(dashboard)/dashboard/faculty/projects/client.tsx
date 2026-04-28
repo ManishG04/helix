@@ -3,8 +3,8 @@
 import React, { useState, useEffect } from "react";
 import { BookOpen, ChevronRight, ArrowRight } from "lucide-react";
 import { Button, Badge } from "@/components/ui";
-import api from "@/lib/api";
-import type { Project, PaginatedResponse } from "@/types";
+import { ProjectsService, ProjectStatus, ProjectPhase } from "@/src/api";
+import type { Project, PaginatedResponse } from "@/src/api";
 
 const MOCK_PROJECTS: Project[] = [
   {
@@ -12,27 +12,27 @@ const MOCK_PROJECTS: Project[] = [
     title: "AI-Based Crop Disease Detection",
     description: "Using CNNs to identify crop diseases from leaf images in real-time.",
     mentor_id: "f1",
-    status: "APPROVED",
-    current_phase: "MID_TERM",
-    created_at: "2026-01-10T00:00:00Z",
+    status: ProjectStatus.APPROVED,
+    current_phase: ProjectPhase.MID_TERM,
+    created_at: "2026-02-10T00:00:00Z",
   },
   {
     id: "p2",
     title: "Smart Energy Management System",
     description: "IoT-based system for optimising energy consumption in buildings.",
     mentor_id: "f1",
-    status: "APPROVED",
-    current_phase: "SYNOPSIS",
-    created_at: "2026-02-05T00:00:00Z",
+    status: ProjectStatus.APPROVED,
+    current_phase: ProjectPhase.SYNOPSIS,
+    created_at: "2026-02-15T00:00:00Z",
   },
   {
     id: "p3",
     title: "Natural Language Query Interface",
     description: null,
     mentor_id: "f1",
-    status: "COMPLETED",
-    current_phase: "FINAL_EVALUATION",
-    created_at: "2025-09-01T00:00:00Z",
+    status: ProjectStatus.COMPLETED,
+    current_phase: ProjectPhase.FINAL_EVALUATION,
+    created_at: "2026-01-05T00:00:00Z",
   },
 ];
 
@@ -62,9 +62,9 @@ function ProjectCard({
   const handleAdvance = async () => {
     setAdvancing(true);
     try {
-      await api.post(`/projects/${project.id}/advance-phase`);
+      await ProjectsService.advanceProjectPhase(project.id!);
     } catch { /* mock */ }
-    onAdvance(project.id);
+    onAdvance(project.id!);
     setAdvancing(false);
   };
 
@@ -114,8 +114,8 @@ function ProjectCard({
         ) : (
           <span className="text-xs text-gray-400">No phase set</span>
         )}
-        <span className="text-xs text-gray-400">
-          Created {new Date(project.created_at).toLocaleDateString()}
+        <span className="font-mono text-gray-500">
+          {(new Date(project.created_at || "")).toLocaleDateString()}
         </span>
       </div>
 
@@ -137,15 +137,14 @@ function ProjectCard({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-export default function MentoredProjectsClient() {
+export default function FacultyProjectsClient() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"ALL" | "PROPOSED" | "APPROVED" | "COMPLETED">("ALL");
+  const [filter, setFilter] = useState<"ALL" | ProjectStatus>("ALL");
 
   useEffect(() => {
-    api
-      .get<PaginatedResponse<Project>>("/projects")
-      .then((r) => setProjects(r.data.items))
+    ProjectsService.listProjects()
+      .then((r) => setProjects(r.items as Project[] || []))
       .catch(() => setProjects(MOCK_PROJECTS))
       .finally(() => setLoading(false));
   }, []);
@@ -154,10 +153,9 @@ export default function MentoredProjectsClient() {
     setProjects((prev) =>
       prev.map((p) => {
         if (p.id !== id) return p;
-        const idx = p.current_phase
-          ? PHASE_ORDER.indexOf(p.current_phase as (typeof PHASE_ORDER)[number])
-          : -1;
-        const nextPhase = idx < PHASE_ORDER.length - 1 ? PHASE_ORDER[idx + 1] : p.current_phase;
+        let nextPhase = ProjectPhase.SYNOPSIS;
+        if (p.current_phase === ProjectPhase.SYNOPSIS) nextPhase = ProjectPhase.MID_TERM;
+        if (p.current_phase === ProjectPhase.MID_TERM) nextPhase = ProjectPhase.FINAL_EVALUATION;
         return { ...p, current_phase: nextPhase };
       })
     );
@@ -174,19 +172,19 @@ export default function MentoredProjectsClient() {
         </p>
       </div>
 
-      {/* Filter tabs */}
+      {/* Filters */}
       <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-        {(["ALL", "PROPOSED", "APPROVED", "COMPLETED"] as const).map((f) => (
+        {(["ALL", ProjectStatus.PROPOSED, ProjectStatus.APPROVED, ProjectStatus.COMPLETED] as const).map((state) => (
           <button
-            key={f}
-            onClick={() => setFilter(f)}
+            key={state}
+            onClick={() => setFilter(state)}
             className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              filter === f
+              filter === state
                 ? "bg-white text-gray-900 shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            {f === "ALL" ? "All" : f.charAt(0) + f.slice(1).toLowerCase()}
+            {state === "ALL" ? "All" : state.charAt(0) + state.slice(1).toLowerCase()}
           </button>
         ))}
       </div>
