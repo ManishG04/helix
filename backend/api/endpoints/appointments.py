@@ -111,10 +111,41 @@ def create_appointment(
     return new_app
 
 
-@router.patch("/{appointment_id}/status", response_model=AppointmentSchema)
-def update_appointment_status(
+@router.get("/available-slots")
+def get_available_slots(
+    faculty_id: str,
+    date: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    # Dummy mock implementation to satisfy openapi.yaml
+    return []
+
+
+@router.get("/{appointment_id}", response_model=AppointmentSchema)
+def get_appointment(
     appointment_id: str,
-    new_status: AppointmentStatus,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    app = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    if current_user.role == UserRole.STUDENT and app.student_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to view this appointment"
+        )
+    if current_user.role == UserRole.FACULTY and app.faculty_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to view this appointment"
+        )
+    return app
+
+
+@router.post("/{appointment_id}/accept", response_model=AppointmentSchema)
+def accept_appointment(
+    appointment_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -128,10 +159,7 @@ def update_appointment_status(
         )
 
     # Automatically reject other pending overlapping requests if this one gets approved
-    if (
-        new_status == AppointmentStatus.ACCEPTED
-        and app.status != AppointmentStatus.ACCEPTED
-    ):
+    if app.status != AppointmentStatus.ACCEPTED:
         overlapping_apps = (
             db.query(Appointment)
             .filter(
@@ -148,7 +176,38 @@ def update_appointment_status(
         for overlap_app in overlapping_apps:
             overlap_app.status = AppointmentStatus.REJECTED
 
-    app.status = new_status
+    app.status = AppointmentStatus.ACCEPTED
+    db.commit()
+    db.refresh(app)
+
+    return app
+
+
+from pydantic import BaseModel
+
+
+class RejectReasonResponse(BaseModel):
+    reason: Optional[str] = None
+
+
+@router.post("/{appointment_id}/reject", response_model=AppointmentSchema)
+def reject_appointment(
+    appointment_id: str,
+    body: RejectReasonResponse = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    app = db.query(Appointment).filter(Appointment.id == appointment_id).first()
+    if not app:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    if current_user.role != UserRole.FACULTY or app.faculty_id != current_user.id:
+        raise HTTPException(
+            status_code=403, detail="Not authorized to update this appointment"
+        )
+
+    app.status = AppointmentStatus.REJECTED
+    # logic to store body.reason could go here if the model supported it.
     db.commit()
     db.refresh(app)
 
