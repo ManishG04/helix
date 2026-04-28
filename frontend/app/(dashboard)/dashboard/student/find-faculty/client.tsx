@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Search, Mail, BookOpen, Calendar } from "lucide-react";
 import { Input, Button, Badge } from "@/components/ui";
-import { UsersService, FacultyAvailabilityService, UserRole } from "@/src/api";
+import { UsersService, FacultyAvailabilityService } from "@/src/api";
 import type { User, FacultyAvailability, PaginatedResponse } from "@/src/api";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -112,7 +112,7 @@ export default function FindFacultyClient() {
   useEffect(() => {
     setLoading(true);
     
-    UsersService.listUsers(page, PAGE_SIZE, UserRole.FACULTY, debouncedSearch || undefined)
+    UsersService.listFaculty(page, PAGE_SIZE, debouncedSearch || undefined)
       .then((res) => {
         setFaculty(res.items as User[] || []);
         setTotal(res.total || 0);

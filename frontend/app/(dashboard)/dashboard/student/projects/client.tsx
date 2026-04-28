@@ -140,7 +140,10 @@ export default function ProjectsClient() {
 
   useEffect(() => {
     ProjectsService.listProjects()
-      .then((res) => setProjects(res.items || []))
+      .then((res) => {
+        const list = Array.isArray(res) ? (res as Project[]) : (res.items || []);
+        setProjects(list);
+      })
       .catch(() => setProjects([]))
       .finally(() => setLoading(false));
   }, []);

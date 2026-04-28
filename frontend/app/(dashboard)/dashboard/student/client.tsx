@@ -38,9 +38,15 @@ export default function StudentDashboardClient() {
           TeamsService.listTeams(1, 50),
         ]);
         if (!isMounted) return;
-        setAppointments(appointmentsRes.items || []);
-        setProjects(projectsRes.items || []);
-        setTeamsCount(teamsRes.items?.length || 0);
+        setAppointments(
+          Array.isArray(appointmentsRes)
+            ? (appointmentsRes as AppointmentWithDetails[])
+            : (appointmentsRes.items || [])
+        );
+        setProjects(
+          Array.isArray(projectsRes) ? (projectsRes as Project[]) : (projectsRes.items || [])
+        );
+        setTeamsCount(Array.isArray(teamsRes) ? teamsRes.length : (teamsRes.items?.length || 0));
       } catch {
         if (!isMounted) return;
         setAppointments([]);

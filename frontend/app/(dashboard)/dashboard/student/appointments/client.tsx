@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { CalendarCheck, CalendarPlus, X, Clock } from "lucide-react";
 import { Button, Input, Badge } from "@/components/ui";
-import { UsersService, FacultyAvailabilityService, AppointmentsService, UserRole, AppointmentStatus } from "@/src/api";
+import { UsersService, FacultyAvailabilityService, AppointmentsService, AppointmentStatus } from "@/src/api";
 import type {
   AppointmentWithDetails,
   FacultyAvailability,
@@ -35,7 +35,7 @@ function BookModal({
 
   // Load faculty
   useEffect(() => {
-    UsersService.listUsers(1, 20, UserRole.FACULTY, facultySearch || undefined)
+    UsersService.listFaculty(1, 20, facultySearch || undefined)
       .then((r) => setFacultyList(r.items as UserType[] || []))
       .catch(() => setFacultyList([]));
   }, [facultySearch]);
@@ -263,18 +263,16 @@ export default function AppointmentsClient() {
   const [loading, setLoading] = useState(true);
   const [showBook, setShowBook] = useState(false);
   const [filter, setFilter] = useState<"ALL" | AppointmentStatus>("ALL");
-  const [facultyUsers, setFacultyUsers] = useState<UserType[]>([]);
-
   useEffect(() => {
     AppointmentsService.listAppointments()
-      .then((r) => setAppointments(r.items as AppointmentWithDetails[] || []))
+      .then((r) => {
+        const list = Array.isArray(r)
+          ? (r as AppointmentWithDetails[])
+          : ((r.items as AppointmentWithDetails[]) || []);
+        setAppointments(list);
+      })
       .catch(() => setAppointments([]))
       .finally(() => setLoading(false));
-
-    // For booking modal
-    UsersService.listUsers(1, 100, UserRole.FACULTY)
-      .then((r) => setFacultyUsers(r.items as UserType[] || []))
-      .catch(() => setFacultyUsers([]));
   }, []);
 
   const filtered = filter === "ALL" ? appointments : appointments.filter((a) => a.status === filter);
