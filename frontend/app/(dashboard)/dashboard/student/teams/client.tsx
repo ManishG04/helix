@@ -4,8 +4,130 @@ import React, { useState, useEffect } from "react";
 import { Plus, Users, Copy, Check, X, Crown, LogOut } from "lucide-react";
 import { Button, Input, Badge } from "@/components/ui";
 import { useAuthStore } from "@/store/authStore";
-import { TeamsService } from "@/src/api";
-import type { TeamWithMembers } from "@/src/api";
+import { ProjectsService, TeamsService } from "@/src/api";
+import type { Project, TeamWithMembers } from "@/src/api";
+
+// ─── Create Team Modal ───────────────────────────────────────────────────────
+
+function CreateTeamModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (team: TeamWithMembers) => void;
+}) {
+  const [teamName, setTeamName] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+    ProjectsService.listProjects(1, 100)
+      .then((res) => {
+        if (!isMounted) return;
+        const list = Array.isArray(res) ? (res as Project[]) : (res.items || []);
+        setProjects(list);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setProjects([]);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingProjects(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!teamName.trim()) {
+      setError("Team name is required.");
+      return;
+    }
+    if (!projectId) {
+      setError("Please select a project.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+    try {
+      const created = await TeamsService.createTeam({
+        name: teamName.trim(),
+        project_id: projectId,
+      });
+
+      if (!created.id) {
+        setError("Team was created but could not be loaded.");
+        return;
+      }
+
+      const detailed = await TeamsService.getTeam(created.id);
+      onCreated(detailed);
+    } catch (err: any) {
+      const detail = err.body?.detail;
+      setError(detail ?? "Failed to create team.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-gray-900">Create Team</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <Input
+            label="Team Name"
+            placeholder="e.g. Helix Innovators"
+            value={teamName}
+            onChange={(e) => setTeamName(e.target.value)}
+            error={error}
+          />
+
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-gray-700">Project</label>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              disabled={loadingProjects || submitting}
+            >
+              <option value="">
+                {loadingProjects ? "Loading projects..." : "Select a project"}
+              </option>
+              {projects.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.title}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" size="sm" type="button" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="sm" type="submit" isLoading={submitting}>
+              Create Team
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 // ─── Join Team Modal ──────────────────────────────────────────────────────────
 
@@ -27,7 +149,12 @@ function JoinTeamModal({
     setError("");
     try {
       const res = await TeamsService.joinTeam({ join_code: code.trim().toUpperCase() });
-      onJoined(res);
+      if (res.id) {
+        const detailed = await TeamsService.getTeam(res.id);
+        onJoined(detailed);
+      } else {
+        onJoined(res);
+      }
     } catch (err: any) {
       const detail = err.body?.detail;
       setError(detail ?? "Invalid join code or you are already in a team.");
@@ -107,7 +234,7 @@ function TeamCard({
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm flex flex-col gap-4">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-semibold text-gray-900">{team.name}</p>
+          <p className="text-sm font-semibold text-gray-900">{team.name || "Untitled Team"}</p>
           <p className="text-xs text-gray-400 mt-0.5">
             {team.members?.length ?? 0} member{(team.members?.length ?? 0) !== 1 ? "s" : ""}
           </p>
@@ -167,17 +294,46 @@ export default function TeamsClient() {
   const [teams, setTeams] = useState<TeamWithMembers[]>([]);
   const [loading, setLoading] = useState(true);
   const [showJoin, setShowJoin] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+
+  const loadTeams = async () => {
+    try {
+      const res = await TeamsService.listTeams();
+      const baseTeams = Array.isArray(res) ? res : (res.items || []);
+      const enrichedTeams = await Promise.all(
+        baseTeams.map(async (team) => {
+          if (!team.id) return team as TeamWithMembers;
+          try {
+            return await TeamsService.getTeam(team.id);
+          } catch {
+            return team as TeamWithMembers;
+          }
+        })
+      );
+      setTeams(enrichedTeams as TeamWithMembers[]);
+    } catch {
+      setTeams([]);
+    }
+  };
 
   useEffect(() => {
-    TeamsService.listTeams()
-      .then((res) => setTeams(res.items as unknown as TeamWithMembers[] || []))
-      .catch(() => setTeams([]))
-      .finally(() => setLoading(false));
+    loadTeams().finally(() => setLoading(false));
   }, []);
 
   const handleJoined = (team: TeamWithMembers) => {
-    setTeams((prev) => [team, ...prev]);
+    setTeams((prev) => {
+      if (team.id && prev.some((t) => t.id === team.id)) return prev;
+      return [team, ...prev];
+    });
     setShowJoin(false);
+  };
+
+  const handleCreated = (team: TeamWithMembers) => {
+    setTeams((prev) => {
+      if (team.id && prev.some((t) => t.id === team.id)) return prev;
+      return [team, ...prev];
+    });
+    setShowCreate(false);
   };
 
   const handleLeave = (id: string) => {
@@ -189,6 +345,9 @@ export default function TeamsClient() {
       {showJoin && (
         <JoinTeamModal onClose={() => setShowJoin(false)} onJoined={handleJoined} />
       )}
+      {showCreate && (
+        <CreateTeamModal onClose={() => setShowCreate(false)} onCreated={handleCreated} />
+      )}
 
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
@@ -198,14 +357,24 @@ export default function TeamsClient() {
               View your teams and share join codes with teammates.
             </p>
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            leftIcon={<Plus className="h-4 w-4" />}
-            onClick={() => setShowJoin(true)}
-          >
-            Join Team
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus className="h-4 w-4" />}
+              onClick={() => setShowCreate(true)}
+            >
+              Create Team
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<Plus className="h-4 w-4" />}
+              onClick={() => setShowJoin(true)}
+            >
+              Join Team
+            </Button>
+          </div>
         </div>
 
         {loading ? (
@@ -216,14 +385,24 @@ export default function TeamsClient() {
           <div className="flex flex-col items-center justify-center py-16 gap-3 text-gray-400">
             <Users className="h-8 w-8" />
             <p className="text-sm">You are not in any team yet.</p>
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={<Plus className="h-4 w-4" />}
-              onClick={() => setShowJoin(true)}
-            >
-              Join Team
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                leftIcon={<Plus className="h-4 w-4" />}
+                onClick={() => setShowCreate(true)}
+              >
+                Create Team
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={<Plus className="h-4 w-4" />}
+                onClick={() => setShowJoin(true)}
+              >
+                Join Team
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
