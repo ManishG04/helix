@@ -160,3 +160,93 @@ def remove_team_member(
     db.delete(member_record)
     db.commit()
     return None
+
+
+@router.get("/{team_id}/members", response_model=List[TeamMemberSchema])
+def list_team_members(
+    team_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    members = db.query(TeamMember).filter(TeamMember.team_id == team_id).all()
+    return members
+
+
+from pydantic import BaseModel
+
+
+class TransferLeadershipRequest(BaseModel):
+    new_leader_id: str
+
+
+@router.post("/{team_id}/transfer-leadership", response_model=TeamSchema)
+def transfer_leadership(
+    team_id: str,
+    request: TransferLeadershipRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    current_member = (
+        db.query(TeamMember)
+        .filter(TeamMember.team_id == team_id, TeamMember.member_id == current_user.id)
+        .first()
+    )
+
+    if not current_member or not current_member.is_leader:
+        raise HTTPException(
+            status_code=403, detail="Only the team leader can transfer leadership"
+        )
+
+    new_leader_member = (
+        db.query(TeamMember)
+        .filter(
+            TeamMember.team_id == team_id, TeamMember.member_id == request.new_leader_id
+        )
+        .first()
+    )
+
+    if not new_leader_member:
+        raise HTTPException(
+            status_code=404, detail="New leader must be a member of the team"
+        )
+
+    current_member.is_leader = False
+    new_leader_member.is_leader = True
+
+    db.commit()
+    db.refresh(team)
+    return team
+
+
+@router.post("/{team_id}/regenerate-code")
+def regenerate_join_code(
+    team_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    current_member = (
+        db.query(TeamMember)
+        .filter(TeamMember.team_id == team_id, TeamMember.member_id == current_user.id)
+        .first()
+    )
+
+    if not current_member or not current_member.is_leader:
+        raise HTTPException(
+            status_code=403, detail="Only the team leader can regenerate code"
+        )
+
+    team.join_code = generate_join_code()
+    db.commit()
+    return {"join_code": team.join_code}
