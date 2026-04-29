@@ -1,6 +1,6 @@
 import uuid
 from typing import Optional, List
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from enum import Enum
 from datetime import date, time, datetime
 
@@ -75,8 +75,7 @@ class Project(ProjectBase):
     current_phase: Optional[ProjectPhase] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TeamBase(BaseModel):
@@ -92,8 +91,7 @@ class Team(TeamBase):
     project_id: uuid.UUID
     join_code: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TeamMember(BaseModel):
@@ -102,8 +100,7 @@ class TeamMember(BaseModel):
     is_leader: bool
     member: User
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TeamWithMembers(Team):
@@ -131,8 +128,7 @@ class FacultyAvailability(FacultyAvailabilityBase):
     source: AvailabilitySource
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AppointmentBase(BaseModel):
@@ -157,5 +153,4 @@ class Appointment(AppointmentBase):
     status: AppointmentStatus
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
