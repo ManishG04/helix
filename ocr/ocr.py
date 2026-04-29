@@ -1,40 +1,48 @@
 import cv2
 import easyocr
 
-img = cv2.imread("timetable.png")
-
+img = cv2.imread("timetable.jpeg")
 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-gray = cv2.bitwise_not(gray)
-gray = cv2.resize(gray, None, fx=2, fy=2)
+img = cv2.resize(gray, None, fx=2, fy=2)
 
 reader = easyocr.Reader(['en'])
-results = reader.readtext(gray)
+results = reader.readtext(img)
 
-lines = []
+detections = []
 for (bbox, txt, prob) in results:
-    lines.append(txt.strip())
+    cx = int((bbox[0][0] + bbox[2][0]) / 2)
+    cy = int((bbox[0][1] + bbox[2][1]) / 2)
+    detections.append((cx, cy, txt.lower().strip()))
 
-times = ["9-10","10-11","11-12","12-1","2-3","3-4"]
+days  = ["monday", "tuesday", "wednesday", "thursday", "friday"]
+times = ["9-10", "10-11", "11-12", "12-1", "2-3", "3-4"]
 
-days = ["monday","tuesday","wednesday","thursday","friday"]
+day_y = {}
+for cx, cy, txt in detections:
+    if txt in days:
+        day_y[txt] = cy
+time_x = sorted([cx for cx, cy, txt in detections if abs(cy - header_y) < 50])[1:7]
 
 free_slots = {}
 
-for i in range(len(lines)):
+for day in days:
+    if day not in day_y:
+        continue
+    dy = day_y[day]
+    free = []
+    for i, tx in enumerate(time_x):
+        found = False
+        for cx, cy, txt in detections:
+            if txt in days or txt == "day":
+                continue
+            if abs(cx - tx) < 80 and abs(cy - dy) < 40:
+                found = True
+                break
 
-    if lines[i].lower() in days:
+        if not found:
+            free.append(times[i])
+    free_slots[day] = free
 
-        day = lines[i]
-        schedule = lines[i+1:i+7]
-
-        free_list = []
-
-        for j in range(len(schedule)):
-            if "free" in schedule[j].lower():
-                free_list.append(times[j])
-
-        free_slots[day] = free_list
-
-print("Free Slot Dictionary:\n")
-print(free_slots)
-
+print("\nFree Slots:\n")
+for d in free_slots:
+    print(d.capitalize(), ":", free_slots[d])
