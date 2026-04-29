@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   CalendarCheck,
   FolderKanban,
@@ -10,19 +10,79 @@ import {
 import StatCard from "@/components/ui/StatCard";
 import { Card, Badge } from "@/components/ui";
 import { useAuthStore } from "@/store/authStore";
-
-const PLACEHOLDER_APPOINTMENTS = [
-  { faculty: "Dr. Anita Sharma", date: "Mar 18, 2026", time: "10:00 AM", status: "ACCEPTED" as const },
-  { faculty: "Prof. Ravi Kumar", date: "Mar 20, 2026", time: "2:00 PM", status: "PENDING" as const },
-];
-
-const PLACEHOLDER_PROJECTS = [
-  { title: "AI-Based Crop Disease Detection", status: "APPROVED" as const },
-  { title: "Blockchain Supply Chain", status: "PROPOSED" as const },
-];
+import {
+  AppointmentsService,
+  AppointmentStatus,
+  ProjectsService,
+  ProjectStatus,
+  TeamsService,
+} from "@/src/api";
+import type { AppointmentWithDetails, Project } from "@/src/api";
 
 export default function StudentDashboardClient() {
   const { user } = useAuthStore();
+  const [loading, setLoading] = useState(true);
+  const [appointments, setAppointments] = useState<AppointmentWithDetails[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [teamsCount, setTeamsCount] = useState(0);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDashboardData() {
+      setLoading(true);
+      try {
+        const [appointmentsRes, projectsRes, teamsRes] = await Promise.all([
+          AppointmentsService.listAppointments(1, 10),
+          ProjectsService.listProjects(1, 10),
+          TeamsService.listTeams(1, 50),
+        ]);
+        if (!isMounted) return;
+        setAppointments(
+          Array.isArray(appointmentsRes)
+            ? (appointmentsRes as AppointmentWithDetails[])
+            : (appointmentsRes.items || [])
+        );
+        setProjects(
+          Array.isArray(projectsRes) ? (projectsRes as Project[]) : (projectsRes.items || [])
+        );
+        setTeamsCount(Array.isArray(teamsRes) ? teamsRes.length : (teamsRes.items?.length || 0));
+      } catch {
+        if (!isMounted) return;
+        setAppointments([]);
+        setProjects([]);
+        setTeamsCount(0);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    loadDashboardData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const pendingAppointments = useMemo(
+    () => appointments.filter((apt) => apt.status === AppointmentStatus.PENDING).length,
+    [appointments]
+  );
+  const upcomingAppointments = useMemo(
+    () =>
+      appointments.filter(
+        (apt) =>
+          apt.status === AppointmentStatus.PENDING ||
+          apt.status === AppointmentStatus.ACCEPTED
+      ),
+    [appointments]
+  );
+  const activeProjects = useMemo(
+    () =>
+      projects.filter(
+        (proj) => proj.status === ProjectStatus.APPROVED
+      ).length,
+    [projects]
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -40,34 +100,32 @@ export default function StudentDashboardClient() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Upcoming Appointments"
-          value={2}
+          value={upcomingAppointments.length}
           icon={CalendarCheck}
           iconColor="text-indigo-600"
           iconBg="bg-indigo-50"
-          trend="Next: Mar 18"
+          trend={loading ? "Loading..." : undefined}
         />
         <StatCard
           label="Active Projects"
-          value={1}
+          value={activeProjects}
           icon={FolderKanban}
           iconColor="text-green-600"
           iconBg="bg-green-50"
-          trend="1 in progress"
         />
         <StatCard
           label="My Teams"
-          value={2}
+          value={teamsCount}
           icon={UsersRound}
           iconColor="text-purple-600"
           iconBg="bg-purple-50"
         />
         <StatCard
           label="Pending Requests"
-          value={1}
+          value={pendingAppointments}
           icon={Clock}
           iconColor="text-yellow-600"
           iconBg="bg-yellow-50"
-          trend="Awaiting faculty response"
         />
       </div>
 
@@ -75,31 +133,43 @@ export default function StudentDashboardClient() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Upcoming Appointments */}
         <Card title="Upcoming Appointments">
-          <ul className="flex flex-col gap-3">
-            {PLACEHOLDER_APPOINTMENTS.map((apt, i) => (
-              <li key={i} className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{apt.faculty}</p>
-                  <p className="text-xs text-gray-500">
-                    {apt.date} &middot; {apt.time}
-                  </p>
-                </div>
-                <Badge status={apt.status} />
-              </li>
-            ))}
-          </ul>
+          {loading ? (
+            <p className="text-sm text-gray-400">Loading appointments...</p>
+          ) : upcomingAppointments.length === 0 ? (
+            <p className="text-sm text-gray-500">No upcoming appointments.</p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {upcomingAppointments.slice(0, 5).map((apt) => (
+                <li key={apt.id} className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{apt.faculty?.name || "Faculty"}</p>
+                    <p className="text-xs text-gray-500">
+                      {apt.date} &middot; {apt.start_time?.slice(0, 5)} - {apt.end_time?.slice(0, 5)}
+                    </p>
+                  </div>
+                  <Badge status={apt.status} />
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
         {/* My Projects */}
         <Card title="My Projects">
-          <ul className="flex flex-col gap-3">
-            {PLACEHOLDER_PROJECTS.map((proj, i) => (
-              <li key={i} className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-900">{proj.title}</p>
-                <Badge status={proj.status} />
-              </li>
-            ))}
-          </ul>
+          {loading ? (
+            <p className="text-sm text-gray-400">Loading projects...</p>
+          ) : projects.length === 0 ? (
+            <p className="text-sm text-gray-500">No projects yet.</p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {projects.slice(0, 5).map((proj) => (
+                <li key={proj.id} className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-gray-900">{proj.title}</p>
+                  <Badge status={proj.status} />
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
     </div>

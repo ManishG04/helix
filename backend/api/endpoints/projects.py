@@ -1,9 +1,10 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 from api.deps import get_db, get_current_user
 from models.user import User
 from models.project import Project
+from models.team import Team
 from schemas.models import (
     Project as ProjectSchema,
     ProjectCreate,
@@ -16,7 +17,7 @@ from schemas.models import (
 router = APIRouter()
 
 
-@router.get("/", response_model=List[ProjectSchema])
+@router.get("", response_model=List[ProjectSchema])
 def list_projects(
     page: int = 1,
     size: int = 20,
@@ -36,7 +37,7 @@ def list_projects(
     return projects
 
 
-@router.post("/", response_model=ProjectSchema, status_code=201)
+@router.post("", response_model=ProjectSchema, status_code=201)
 def create_project(
     project_in: ProjectCreate,
     db: Session = Depends(get_db),
@@ -132,3 +133,37 @@ def advance_project_phase(
     db.commit()
     db.refresh(project)
     return project
+
+
+@router.delete(
+    "/{project_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete project",
+)
+def delete_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+
+    # OpenAPI expects: allowed for PROPOSED projects or by Admin.
+    if current_user.role != UserRole.ADMIN:
+        if current_user.role != UserRole.STUDENT or project.status != ProjectStatus.PROPOSED:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only delete PROPOSED projects",
+            )
+
+    # Avoid FK constraint errors: teams reference projects.id.
+    if db.query(Team).filter(Team.project_id == project_id).first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete a project with existing teams",
+        )
+
+    db.delete(project)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -45,16 +45,21 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
     return user
 
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
 @router.post("/login")
 def login(
-    db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()
+    request: LoginRequest, db: Session = Depends(get_db)
 ):
     """
-    OAuth2 compatible token login, get an access token for future requests
+    Login and get an access token for future requests
     """
-    user = db.query(User).filter(User.email == form_data.username).first()
+    user = db.query(User).filter(User.email == request.email).first()
     if not user or not security.verify_password(
-        form_data.password, user.hashed_password
+        request.password, user.hashed_password
     ):
         raise HTTPException(status_code=400, detail="Incorrect email or password")
 

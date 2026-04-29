@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
-import type { UserRole } from "@/types";
+import { UserRole } from "@/src/api";
 
 const ROLE_REDIRECT: Record<UserRole, string> = {
   STUDENT: "/dashboard/student",
@@ -17,7 +17,7 @@ export default function RootPage() {
 
   useEffect(() => {
     if (user) {
-      router.replace(ROLE_REDIRECT[user.role]);
+      router.replace(user.role ? ROLE_REDIRECT[user.role] : "/login");
     } else if (!token) {
       router.replace("/login");
     }

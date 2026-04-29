@@ -6,11 +6,11 @@ import { useRouter } from "next/navigation";
 import { User as UserIcon, Mail, Lock, ChevronDown } from "lucide-react";
 import { Button, Input } from "@/components/ui";
 import { register } from "@/lib/auth";
-import type { UserRole } from "@/types";
+import { UserRole } from "@/src/api";
 
 const ROLES: { value: UserRole; label: string }[] = [
-  { value: "STUDENT", label: "Student" },
-  { value: "FACULTY", label: "Faculty" },
+  { value: UserRole.STUDENT, label: "Student" },
+  { value: UserRole.FACULTY, label: "Faculty" },
 ];
 
 export default function RegisterPage() {
@@ -19,7 +19,7 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<UserRole>("STUDENT");
+  const [role, setRole] = useState<UserRole>(UserRole.STUDENT);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 

@@ -1,65 +1,17 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { CalendarCheck, CalendarPlus, X, Clock, User } from "lucide-react";
+import { CalendarCheck, CalendarPlus, X, Clock } from "lucide-react";
 import { Button, Input, Badge } from "@/components/ui";
-import api from "@/lib/api";
+import { UsersService, FacultyAvailabilityService, AppointmentsService, AppointmentStatus } from "@/src/api";
 import type {
   AppointmentWithDetails,
   FacultyAvailability,
   User as UserType,
-  PaginatedResponse,
   AppointmentCreate,
-} from "@/types";
+} from "@/src/api";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-// ─── Mock data ────────────────────────────────────────────────────────────────
-
-const MOCK_APPOINTMENTS: AppointmentWithDetails[] = [
-  {
-    id: "a1",
-    slot_id: "sl1",
-    student_id: "s1",
-    faculty_id: "f1",
-    team_id: null,
-    date: "2026-03-18",
-    start_time: "10:00:00",
-    end_time: "10:30:00",
-    purpose: "Discuss project progress and milestone review",
-    status: "ACCEPTED",
-    student: {
-      id: "s1", name: "Alex Student", email: "student@helix.dev",
-      role: "STUDENT", academic_interests: null, created_at: "2026-01-01T00:00:00Z",
-    },
-    faculty: {
-      id: "f1", name: "Dr. Anita Sharma", email: "anita.sharma@helix.dev",
-      role: "FACULTY", academic_interests: "ML, Data Science", created_at: "2026-01-01T00:00:00Z",
-    },
-    team: null,
-  },
-  {
-    id: "a2",
-    slot_id: "sl2",
-    student_id: "s1",
-    faculty_id: "f2",
-    team_id: null,
-    date: "2026-03-20",
-    start_time: "14:00:00",
-    end_time: "14:30:00",
-    purpose: "Initial meeting",
-    status: "PENDING",
-    student: {
-      id: "s1", name: "Alex Student", email: "student@helix.dev",
-      role: "STUDENT", academic_interests: null, created_at: "2026-01-01T00:00:00Z",
-    },
-    faculty: {
-      id: "f2", name: "Prof. Ravi Kumar", email: "ravi.kumar@helix.dev",
-      role: "FACULTY", academic_interests: "Blockchain", created_at: "2026-01-01T00:00:00Z",
-    },
-    team: null,
-  },
-];
 
 // ─── Book Appointment Modal ───────────────────────────────────────────────────
 
@@ -83,25 +35,17 @@ function BookModal({
 
   // Load faculty
   useEffect(() => {
-    api
-      .get<PaginatedResponse<UserType>>("/users/faculty", {
-        params: { search: facultySearch || undefined, size: 20 },
-      })
-      .then((r) => setFacultyList(r.data.items))
-      .catch(() =>
-        setFacultyList([
-          { id: "f1", name: "Dr. Anita Sharma", email: "anita.sharma@helix.dev", role: "FACULTY", academic_interests: "ML, Data Science", created_at: "" },
-          { id: "f2", name: "Prof. Ravi Kumar", email: "ravi.kumar@helix.dev", role: "FACULTY", academic_interests: "Blockchain", created_at: "" },
-        ])
-      );
+    UsersService.listFaculty(1, 20, facultySearch || undefined)
+      .then((r) => setFacultyList(r.items as UserType[] || []))
+      .catch(() => setFacultyList([]));
   }, [facultySearch]);
 
   const selectFaculty = async (f: UserType) => {
     setSelectedFaculty(f);
     setLoading(true);
     try {
-      const r = await api.get<FacultyAvailability[]>(`/faculty/${f.id}/availability`);
-      setSlots(r.data.filter((s) => s.status === "ACTIVE"));
+      const data = await FacultyAvailabilityService.getFacultyAvailability(f.id!);
+      setSlots(data.filter((s) => s.status === "ACTIVE"));
     } catch {
       setSlots([]);
     } finally {
@@ -118,34 +62,18 @@ function BookModal({
     setLoading(true);
     setError("");
     const payload: AppointmentCreate = {
-      slot_id: selectedSlot.id,
+      slot_id: selectedSlot.id!,
       date,
-      start_time: selectedSlot.start_time,
-      end_time: selectedSlot.end_time,
-      faculty_id: selectedFaculty.id,
+      start_time: selectedSlot.start_time!,
+      end_time: selectedSlot.end_time!,
+      faculty_id: selectedFaculty.id!,
       purpose: purpose || null,
     };
     try {
-      const r = await api.post<AppointmentWithDetails>("/appointments", payload);
-      onBooked(r.data);
+      const r = await AppointmentsService.createAppointment(payload);
+      onBooked(r as unknown as AppointmentWithDetails);
     } catch {
-      // Mock fallback
-      const mock: AppointmentWithDetails = {
-        id: crypto.randomUUID(),
-        slot_id: selectedSlot.id,
-        student_id: "me",
-        faculty_id: selectedFaculty.id,
-        team_id: null,
-        date,
-        start_time: selectedSlot.start_time,
-        end_time: selectedSlot.end_time,
-        purpose: purpose || null,
-        status: "PENDING",
-        student: { id: "me", name: "Me", email: "", role: "STUDENT", academic_interests: null, created_at: "" },
-        faculty: selectedFaculty,
-        team: null,
-      };
-      onBooked(mock);
+      setError("Failed to book appointment.");
     } finally {
       setLoading(false);
     }
@@ -215,7 +143,7 @@ function BookModal({
                         className="w-full text-left rounded-lg border border-gray-200 px-3 py-2.5 hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
                       >
                         <p className="text-sm font-medium text-gray-900">
-                          {DAYS[s.day_of_week]} &middot; {s.start_time.slice(0, 5)} – {s.end_time.slice(0, 5)}
+                          {DAYS[s.day_of_week ?? 0]} &middot; {s.start_time?.slice(0, 5)} – {s.end_time?.slice(0, 5)}
                         </p>
                         <p className="text-xs text-gray-400">{s.slot_duration} min</p>
                       </button>
@@ -237,7 +165,7 @@ function BookModal({
               </button>
               <div className="rounded-lg bg-gray-50 px-4 py-3 flex flex-col gap-1 text-sm">
                 <p><span className="text-gray-500">Faculty:</span> <strong>{selectedFaculty.name}</strong></p>
-                <p><span className="text-gray-500">Slot:</span> {DAYS[selectedSlot.day_of_week]}, {selectedSlot.start_time.slice(0, 5)} – {selectedSlot.end_time.slice(0, 5)}</p>
+                <p><span className="text-gray-500">Slot:</span> {DAYS[selectedSlot.day_of_week ?? 0]}, {selectedSlot.start_time?.slice(0, 5)} – {selectedSlot.end_time?.slice(0, 5)}</p>
               </div>
               <Input
                 label="Date"
@@ -283,29 +211,37 @@ function AppointmentRow({
     if (!confirm("Cancel this appointment?")) return;
     setCancelling(true);
     try {
-      await api.delete(`/appointments/${apt.id}`);
-    } catch { /* mock */ }
-    onCancel(apt.id);
+      await AppointmentsService.cancelAppointment(apt.id!);
+    } catch {
+      setCancelling(false);
+      return;
+    }
+    onCancel(apt.id!);
   };
 
   return (
     <li className="flex items-start justify-between gap-4 py-3 border-b border-gray-100 last:border-0">
       <div className="flex flex-col gap-1 min-w-0">
         <div className="flex items-center gap-2">
-          <User className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-          <p className="text-sm font-medium text-gray-900 truncate">{apt.faculty.name}</p>
+          <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-semibold text-xs shrink-0">
+            {apt.faculty?.name?.[0]?.toUpperCase() || "F"}
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">{apt.faculty?.name}</p>
+            <p className="text-xs text-gray-400">{apt.faculty?.email}</p>
+          </div>
         </div>
-        <p className="text-xs text-gray-500 flex items-center gap-1">
-          <Clock className="h-3 w-3" />
-          {apt.date} &middot; {apt.start_time.slice(0, 5)} – {apt.end_time.slice(0, 5)}
-        </p>
+        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+          <Clock className="h-3.5 w-3.5" />
+          {apt.date} &middot; {apt.start_time?.slice(0, 5)} – {apt.end_time?.slice(0, 5)}
+        </div>
         {apt.purpose && (
           <p className="text-xs text-gray-400 italic line-clamp-1">{apt.purpose}</p>
         )}
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        <Badge status={apt.status} />
-        {apt.status === "PENDING" && (
+        <Badge status={apt.status ?? AppointmentStatus.PENDING} />
+        {apt.status === AppointmentStatus.PENDING && (
           <button
             onClick={handleCancel}
             disabled={cancelling}
@@ -326,13 +262,16 @@ export default function AppointmentsClient() {
   const [appointments, setAppointments] = useState<AppointmentWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [showBook, setShowBook] = useState(false);
-  const [filter, setFilter] = useState<"ALL" | "PENDING" | "ACCEPTED" | "REJECTED">("ALL");
-
+  const [filter, setFilter] = useState<"ALL" | AppointmentStatus>("ALL");
   useEffect(() => {
-    api
-      .get<PaginatedResponse<AppointmentWithDetails>>("/appointments")
-      .then((r) => setAppointments(r.data.items))
-      .catch(() => setAppointments(MOCK_APPOINTMENTS))
+    AppointmentsService.listAppointments()
+      .then((r) => {
+        const list = Array.isArray(r)
+          ? (r as AppointmentWithDetails[])
+          : ((r.items as AppointmentWithDetails[]) || []);
+        setAppointments(list);
+      })
+      .catch(() => setAppointments([]))
       .finally(() => setLoading(false));
   }, []);
 
@@ -372,8 +311,8 @@ export default function AppointmentsClient() {
         </div>
 
         {/* Filter tabs */}
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-          {(["ALL", "PENDING", "ACCEPTED", "REJECTED"] as const).map((f) => (
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
+          {(["ALL", AppointmentStatus.PENDING, AppointmentStatus.ACCEPTED, AppointmentStatus.REJECTED] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}

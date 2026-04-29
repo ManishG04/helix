@@ -3,46 +3,11 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Trash2, X, CalendarClock, Upload } from "lucide-react";
 import { Button, Input, Badge } from "@/components/ui";
-import api from "@/lib/api";
-import type { FacultyAvailability, FacultyAvailabilityCreate, DayOfWeek } from "@/types";
+import { FacultyAvailabilityService, TimetableOcrService } from "@/src/api";
+import type { FacultyAvailability, FacultyAvailabilityCreate, DayOfWeek } from "@/src/api";
+import { AvailabilityStatus, AvailabilitySource } from "@/src/api";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-const MOCK_SLOTS: FacultyAvailability[] = [
-  {
-    id: "sl1",
-    faculty_id: "f1",
-    day_of_week: 1,
-    start_time: "09:00:00",
-    end_time: "10:00:00",
-    slot_duration: 60,
-    status: "ACTIVE",
-    source: "MANUAL",
-    created_at: "2026-01-15T00:00:00Z",
-  },
-  {
-    id: "sl2",
-    faculty_id: "f1",
-    day_of_week: 3,
-    start_time: "14:00:00",
-    end_time: "15:00:00",
-    slot_duration: 60,
-    status: "ACTIVE",
-    source: "MANUAL",
-    created_at: "2026-01-15T00:00:00Z",
-  },
-  {
-    id: "sl3",
-    faculty_id: "f1",
-    day_of_week: 5,
-    start_time: "11:00:00",
-    end_time: "11:30:00",
-    slot_duration: 30,
-    status: "PENDING_REVIEW",
-    source: "OCR",
-    created_at: "2026-02-01T00:00:00Z",
-  },
-];
 
 // ─── Add Slot Modal ───────────────────────────────────────────────────────────
 
@@ -70,8 +35,8 @@ function AddSlotModal({
       end_time: `${end}:00`,
     };
     try {
-      const r = await api.post<FacultyAvailability>("/faculty/availability", payload);
-      onAdded(r.data);
+      const r = await FacultyAvailabilityService.addAvailability(payload);
+      onAdded(r);
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       if (detail?.includes("409") || detail?.includes("overlap")) {
@@ -79,21 +44,7 @@ function AddSlotModal({
         setLoading(false);
         return;
       }
-      // Mock fallback
-      const [sh, sm] = start.split(":").map(Number);
-      const [eh, em] = end.split(":").map(Number);
-      const mock: FacultyAvailability = {
-        id: crypto.randomUUID(),
-        faculty_id: "me",
-        day_of_week: day,
-        start_time: `${start}:00`,
-        end_time: `${end}:00`,
-        slot_duration: (eh * 60 + em) - (sh * 60 + sm),
-        status: "ACTIVE",
-        source: "MANUAL",
-        created_at: new Date().toISOString(),
-      };
-      onAdded(mock);
+      setError(detail ?? "Failed to add slot.");
     } finally {
       setLoading(false);
     }
@@ -168,31 +119,37 @@ function SlotRow({
     if (!confirm("Delete this slot?")) return;
     setDeleting(true);
     try {
-      await api.delete(`/faculty/availability/${slot.id}`);
-    } catch { /* allow mock */ }
-    onDelete(slot.id);
+      await FacultyAvailabilityService.deleteAvailability(slot.id!);
+    } catch {
+      setDeleting(false);
+      return;
+    }
+    onDelete(slot.id!);
   };
 
   const handleActivate = async () => {
     setActivating(true);
     try {
-      await api.put(`/faculty/availability/${slot.id}`, { status: "ACTIVE" });
-    } catch { /* allow mock */ }
-    onActivate(slot.id);
+      await FacultyAvailabilityService.updateAvailability(slot.id!, { status: AvailabilityStatus.ACTIVE });
+    } catch {
+      setActivating(false);
+      return;
+    }
+    onActivate(slot.id!);
   };
 
   return (
     <li className="flex items-center justify-between gap-4 py-3 border-b border-gray-100 last:border-0">
       <div className="flex flex-col gap-0.5">
-        <p className="text-sm font-medium text-gray-900">{DAYS[slot.day_of_week]}</p>
+        <p className="text-sm font-medium text-gray-900">{slot.day_of_week !== undefined ? DAYS[slot.day_of_week] : ""}</p>
         <p className="text-xs text-gray-500">
-          {slot.start_time.slice(0, 5)} – {slot.end_time.slice(0, 5)} &middot; {slot.slot_duration} min
+          {slot.start_time?.slice(0, 5)} – {slot.end_time?.slice(0, 5)} &middot; {slot.slot_duration} min
         </p>
       </div>
       <div className="flex items-center gap-2">
-        <Badge status={slot.status} />
+        <Badge status={slot.status ?? AvailabilityStatus.PENDING_REVIEW} />
         <span className="text-xs text-gray-400 uppercase">{slot.source}</span>
-        {slot.status === "PENDING_REVIEW" && (
+        {slot.status === AvailabilityStatus.PENDING_REVIEW && (
           <Button
             variant="secondary"
             size="sm"
@@ -226,10 +183,9 @@ export default function AvailabilityClient() {
   const [uploadMsg, setUploadMsg] = useState("");
 
   useEffect(() => {
-    api
-      .get<FacultyAvailability[]>("/faculty/availability")
-      .then((r) => setSlots(r.data))
-      .catch(() => setSlots(MOCK_SLOTS))
+    FacultyAvailabilityService.getMyAvailability()
+      .then((r) => setSlots(r || []))
+      .catch(() => setSlots([]))
       .finally(() => setLoading(false));
   }, []);
 
@@ -239,12 +195,12 @@ export default function AvailabilityClient() {
   };
 
   const handleDelete = (id: string) => {
-    setSlots((prev) => prev.filter((s) => s.id !== id));
+    setSlots((prev: FacultyAvailability[]) => prev.filter((s) => s.id !== id));
   };
 
   const handleActivate = (id: string) => {
-    setSlots((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, status: "ACTIVE" } : s))
+    setSlots((prev: FacultyAvailability[]) =>
+      prev.map((s) => (s.id === id ? { ...s, status: AvailabilityStatus.ACTIVE } : s))
     );
   };
 
@@ -253,15 +209,11 @@ export default function AvailabilityClient() {
     if (!file) return;
     setUploading(true);
     setUploadMsg("");
-    const form = new FormData();
-    form.append("file", file);
     try {
-      await api.post("/faculty/timetable/upload", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      await TimetableOcrService.uploadTimetable({ file: file as Blob });
       setUploadMsg("Timetable uploaded. OCR processing in background — slots will appear shortly.");
     } catch {
-      setUploadMsg("OCR upload unavailable in demo mode.");
+      setUploadMsg("Failed to upload timetable. Please try again.");
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -274,8 +226,8 @@ export default function AvailabilityClient() {
     return acc;
   }, {});
 
-  const activeCount = slots.filter((s) => s.status === "ACTIVE").length;
-  const pendingCount = slots.filter((s) => s.status === "PENDING_REVIEW").length;
+  const activeCount = slots.filter((s) => s.status === AvailabilityStatus.ACTIVE).length;
+  const pendingCount = slots.filter((s) => s.status === AvailabilityStatus.PENDING_REVIEW).length;
 
   return (
     <>

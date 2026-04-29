@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   CalendarClock,
   BookOpen,
@@ -10,19 +10,57 @@ import {
 import StatCard from "@/components/ui/StatCard";
 import { Card, Badge } from "@/components/ui";
 import { useAuthStore } from "@/store/authStore";
-
-const PLACEHOLDER_REQUESTS = [
-  { student: "Arjun Mehta", topic: "ML Research Collaboration", date: "Mar 17, 2026", status: "PENDING" as const },
-  { student: "Priya Singh", topic: "Web3 Project Guidance", date: "Mar 15, 2026", status: "ACCEPTED" as const },
-];
-
-const PLACEHOLDER_PROJECTS = [
-  { title: "AI-Based Crop Disease Detection", students: 3, status: "APPROVED" as const, phase: "MID_TERM" as const },
-  { title: "Smart Grid Optimization", students: 2, status: "PROPOSED" as const, phase: "SYNOPSIS" as const },
-];
+import { AppointmentsService, AppointmentStatus, ProjectsService, TeamsService } from "@/src/api";
+import type { AppointmentWithDetails, Project, Team } from "@/src/api";
 
 export default function FacultyDashboardClient() {
   const { user } = useAuthStore();
+  const [loading, setLoading] = useState(true);
+  const [appointments, setAppointments] = useState<AppointmentWithDetails[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadDashboardData() {
+      setLoading(true);
+      try {
+        const [appointmentsRes, projectsRes, teamsRes] = await Promise.all([
+          AppointmentsService.listAppointments(1, 20),
+          ProjectsService.listProjects(1, 20),
+          TeamsService.listTeams(1, 100),
+        ]);
+        if (!isMounted) return;
+        setAppointments(appointmentsRes.items || []);
+        setProjects(projectsRes.items || []);
+        setTeams(teamsRes.items || []);
+      } catch {
+        if (!isMounted) return;
+        setAppointments([]);
+        setProjects([]);
+        setTeams([]);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    loadDashboardData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const pendingRequests = useMemo(
+    () => appointments.filter((apt) => apt.status === AppointmentStatus.PENDING),
+    [appointments]
+  );
+  const totalStudents = useMemo(() => {
+    const uniqueStudentIds = new Set(
+      appointments.map((apt) => apt.student_id).filter(Boolean)
+    );
+    return uniqueStudentIds.size;
+  }, [appointments]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -40,34 +78,33 @@ export default function FacultyDashboardClient() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Today's Appointments"
-          value={3}
+          value={appointments.length}
           icon={CalendarClock}
           iconColor="text-indigo-600"
           iconBg="bg-indigo-50"
-          trend="Next at 11:00 AM"
+          trend={loading ? "Loading..." : undefined}
         />
         <StatCard
           label="Mentored Projects"
-          value={2}
+          value={projects.length}
           icon={BookOpen}
           iconColor="text-green-600"
           iconBg="bg-green-50"
         />
         <StatCard
           label="Pending Requests"
-          value={1}
+          value={pendingRequests.length}
           icon={ClipboardList}
           iconColor="text-yellow-600"
           iconBg="bg-yellow-50"
-          trend="Needs your review"
         />
         <StatCard
           label="Total Students"
-          value={5}
+          value={totalStudents}
           icon={Users}
           iconColor="text-purple-600"
           iconBg="bg-purple-50"
-          trend="Across all projects"
+          trend={`${teams.length} teams`}
         />
       </div>
 
@@ -75,34 +112,48 @@ export default function FacultyDashboardClient() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Incoming Requests */}
         <Card title="Incoming Requests">
-          <ul className="flex flex-col gap-3">
-            {PLACEHOLDER_REQUESTS.map((req, i) => (
-              <li key={i} className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{req.student}</p>
-                  <p className="text-xs text-gray-500">
-                    {req.topic} &middot; {req.date}
-                  </p>
-                </div>
-                <Badge status={req.status} />
-              </li>
-            ))}
-          </ul>
+          {loading ? (
+            <p className="text-sm text-gray-400">Loading requests...</p>
+          ) : pendingRequests.length === 0 ? (
+            <p className="text-sm text-gray-500">No pending requests.</p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {pendingRequests.slice(0, 5).map((req) => (
+                <li key={req.id} className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{req.student?.name || "Student"}</p>
+                    <p className="text-xs text-gray-500">
+                      {req.purpose || "Appointment request"} &middot; {req.date}
+                    </p>
+                  </div>
+                  <Badge status={req.status} />
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
         {/* Mentored Projects */}
         <Card title="Mentored Projects">
-          <ul className="flex flex-col gap-3">
-            {PLACEHOLDER_PROJECTS.map((proj, i) => (
-              <li key={i} className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{proj.title}</p>
-                  <p className="text-xs text-gray-500">{proj.students} students &middot; Phase: {proj.phase.replace("_", " ")}</p>
-                </div>
-                <Badge status={proj.status} />
-              </li>
-            ))}
-          </ul>
+          {loading ? (
+            <p className="text-sm text-gray-400">Loading projects...</p>
+          ) : projects.length === 0 ? (
+            <p className="text-sm text-gray-500">No projects assigned.</p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {projects.slice(0, 5).map((proj) => (
+                <li key={proj.id} className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{proj.title}</p>
+                    <p className="text-xs text-gray-500">
+                      Phase: {proj.current_phase ? String(proj.current_phase).replace("_", " ") : "Not started"}
+                    </p>
+                  </div>
+                  <Badge status={proj.status} />
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
       </div>
     </div>

@@ -12,8 +12,8 @@ import {
   BarChart3,
 } from "lucide-react";
 import StatCard from "@/components/ui/StatCard";
-import api from "@/lib/api";
-import type { User, Project, PaginatedResponse } from "@/types";
+import { UsersService, UserRole } from "@/src/api";
+import type { User } from "@/src/api";
 
 interface Stats {
   totalUsers: number;
@@ -26,20 +26,9 @@ interface Stats {
   completedProjects: number;
   totalAppointments: number;
   pendingAppointments: number;
+  acceptedAppointments: number;
+  rejectedAppointments: number;
 }
-
-const MOCK_STATS: Stats = {
-  totalUsers: 42,
-  students: 35,
-  faculty: 6,
-  admins: 1,
-  totalProjects: 18,
-  proposedProjects: 5,
-  approvedProjects: 10,
-  completedProjects: 3,
-  totalAppointments: 87,
-  pendingAppointments: 12,
-};
 
 // ─── Stat bar ─────────────────────────────────────────────────────────────────
 
@@ -79,36 +68,34 @@ export default function SystemStatsClient() {
   const [recentUsers, setRecentUsers] = useState<User[]>([]);
 
   useEffect(() => {
-    // Try to derive stats from real API calls
-    Promise.allSettled([
-      api.get<PaginatedResponse<User>>("/users", { params: { size: 5 } }),
-      api.get<PaginatedResponse<Project>>("/projects", { params: { size: 1 } }),
-    ]).then(([usersResult, projectsResult]) => {
-      if (usersResult.status === "fulfilled") {
-        const data = usersResult.value.data;
-        setRecentUsers(data.items.slice(0, 5));
-        // We only have page totals, approximate
-        setStats((prev) => ({
-          ...(prev ?? MOCK_STATS),
-          totalUsers: data.total,
-        }));
-      } else {
-        setStats(MOCK_STATS);
-        setRecentUsers(MOCK_STATS.students > 0 ? [
-          { id: "s1", name: "Alex Student", email: "student@helix.dev", role: "STUDENT", academic_interests: null, created_at: "2026-02-15T00:00:00Z" },
-          { id: "f1", name: "Dr. Anita Sharma", email: "faculty@helix.dev", role: "FACULTY", academic_interests: "ML", created_at: "2026-01-05T00:00:00Z" },
-        ] : []);
-      }
-      if (projectsResult.status === "fulfilled") {
-        setStats((prev) => ({
-          ...(prev ?? MOCK_STATS),
-          totalProjects: projectsResult.value.data.total,
-        }));
-      }
-    }).finally(() => {
-      setStats((prev) => prev ?? MOCK_STATS);
-      setLoading(false);
-    });
+    Promise.all([
+      UsersService.listUsers(1, 5),
+      UsersService.getSystemStats(),
+    ])
+      .then(([usersResult, statsResult]) => {
+        setRecentUsers(usersResult.items as User[] || []);
+        setStats({
+          totalUsers: statsResult.total_users || 0,
+          students: statsResult.users_by_role?.STUDENT || 0,
+          faculty: statsResult.users_by_role?.FACULTY || 0,
+          admins: statsResult.users_by_role?.ADMIN || 0,
+          totalProjects: statsResult.total_projects || 0,
+          proposedProjects: statsResult.projects_by_status?.PROPOSED || 0,
+          approvedProjects: statsResult.projects_by_status?.APPROVED || 0,
+          completedProjects: statsResult.projects_by_status?.COMPLETED || 0,
+          totalAppointments: statsResult.total_appointments || 0,
+          pendingAppointments: statsResult.appointments_by_status?.PENDING || 0,
+          acceptedAppointments: statsResult.appointments_by_status?.ACCEPTED || 0,
+          rejectedAppointments: statsResult.appointments_by_status?.REJECTED || 0,
+        });
+      })
+      .catch(() => {
+        setRecentUsers([]);
+        setStats(null);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   if (loading || !stats) {
@@ -198,13 +185,8 @@ export default function SystemStatsClient() {
           </div>
           <div className="flex flex-col gap-3">
             <StatBar label="Pending" value={stats.pendingAppointments} max={stats.totalAppointments} color="bg-yellow-400" />
-            <StatBar
-              label="Accepted"
-              value={stats.totalAppointments - stats.pendingAppointments - Math.round(stats.totalAppointments * 0.1)}
-              max={stats.totalAppointments}
-              color="bg-green-400"
-            />
-            <StatBar label="Rejected" value={Math.round(stats.totalAppointments * 0.1)} max={stats.totalAppointments} color="bg-red-300" />
+            <StatBar label="Accepted" value={stats.acceptedAppointments} max={stats.totalAppointments} color="bg-green-400" />
+            <StatBar label="Rejected" value={stats.rejectedAppointments} max={stats.totalAppointments} color="bg-red-300" />
           </div>
         </div>
 
@@ -222,13 +204,13 @@ export default function SystemStatsClient() {
                 <li key={u.id} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="h-6 w-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-semibold shrink-0">
-                      {u.name[0]?.toUpperCase()}
+                      {u.name?.[0]?.toUpperCase()}
                     </div>
                     <span className="text-sm text-gray-800">{u.name}</span>
                   </div>
                   <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                    u.role === "STUDENT" ? "bg-blue-100 text-blue-700"
-                    : u.role === "FACULTY" ? "bg-purple-100 text-purple-700"
+                    u.role === UserRole.STUDENT ? "bg-blue-100 text-blue-700"
+                    : u.role === UserRole.FACULTY ? "bg-purple-100 text-purple-700"
                     : "bg-red-100 text-red-700"
                   }`}>
                     {u.role}

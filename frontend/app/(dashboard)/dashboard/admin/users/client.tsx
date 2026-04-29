@@ -3,21 +3,13 @@
 import React, { useState, useEffect } from "react";
 import { Search, Trash2, Users } from "lucide-react";
 import { Input, Badge } from "@/components/ui";
-import api from "@/lib/api";
-import type { User, UserRole, PaginatedResponse } from "@/types";
-
-const MOCK_USERS: User[] = [
-  { id: "s1", name: "Alex Student", email: "student@helix.dev", role: "STUDENT", academic_interests: null, created_at: "2026-01-10T00:00:00Z" },
-  { id: "f1", name: "Dr. Anita Sharma", email: "faculty@helix.dev", role: "FACULTY", academic_interests: "ML, Data Science", created_at: "2026-01-05T00:00:00Z" },
-  { id: "a1", name: "Admin User", email: "admin@helix.dev", role: "ADMIN", academic_interests: null, created_at: "2026-01-01T00:00:00Z" },
-  { id: "f2", name: "Prof. Ravi Kumar", email: "ravi.kumar@helix.dev", role: "FACULTY", academic_interests: "Blockchain, Distributed Systems", created_at: "2026-01-08T00:00:00Z" },
-  { id: "s2", name: "Jamie Lee", email: "jamie@helix.dev", role: "STUDENT", academic_interests: null, created_at: "2026-02-15T00:00:00Z" },
-];
+import { UsersService, UserRole } from "@/src/api";
+import type { User } from "@/src/api";
 
 const ROLE_COLORS: Record<UserRole, string> = {
-  STUDENT: "bg-blue-100 text-blue-700",
-  FACULTY: "bg-purple-100 text-purple-700",
-  ADMIN: "bg-red-100 text-red-700",
+  [UserRole.STUDENT]: "bg-blue-100 text-blue-700",
+  [UserRole.FACULTY]: "bg-purple-100 text-purple-700",
+  [UserRole.ADMIN]: "bg-red-100 text-red-700",
 };
 
 // ─── User Row ─────────────────────────────────────────────────────────────────
@@ -35,9 +27,12 @@ function UserRow({
     if (!confirm(`Delete user "${user.name}"? This cannot be undone.`)) return;
     setDeleting(true);
     try {
-      await api.delete(`/users/${user.id}`);
-    } catch { /* allow mock */ }
-    onDelete(user.id);
+      await UsersService.deleteUser(user.id!);
+    } catch {
+      setDeleting(false);
+      return;
+    }
+    onDelete(user.id!);
   };
 
   return (
@@ -45,7 +40,7 @@ function UserRow({
       <td className="py-3 px-4">
         <div className="flex items-center gap-3">
           <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-semibold text-xs shrink-0">
-            {user.name[0]?.toUpperCase()}
+            {user.name?.[0]?.toUpperCase() || "U"}
           </div>
           <div>
             <p className="text-sm font-medium text-gray-900">{user.name}</p>
@@ -54,7 +49,7 @@ function UserRow({
         </div>
       </td>
       <td className="py-3 px-4">
-        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${ROLE_COLORS[user.role]}`}>
+        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${user.role ? ROLE_COLORS[user.role] : "bg-gray-100 text-gray-700"}`}>
           {user.role}
         </span>
       </td>
@@ -62,7 +57,7 @@ function UserRow({
         {user.academic_interests ?? <span className="text-gray-300">—</span>}
       </td>
       <td className="py-3 px-4 text-xs text-gray-400 hidden sm:table-cell">
-        {new Date(user.created_at).toLocaleDateString()}
+        {user.created_at ? new Date(user.created_at).toLocaleDateString() : ""}
       </td>
       <td className="py-3 px-4 text-right">
         <button
@@ -106,23 +101,14 @@ export default function ManageUsersClient() {
     if (debouncedSearch) params.search = debouncedSearch;
     if (roleFilter !== "ALL") params.role = roleFilter;
 
-    api
-      .get<PaginatedResponse<User>>("/users", { params })
+    UsersService.listUsers(page, PAGE_SIZE, roleFilter === "ALL" ? undefined : roleFilter, debouncedSearch || undefined)
       .then((r) => {
-        setUsers(r.data.items);
-        setTotal(r.data.total);
+        setUsers(r.items as User[] || []);
+        setTotal(r.total || 0);
       })
       .catch(() => {
-        const filtered = MOCK_USERS.filter((u) => {
-          const matchRole = roleFilter === "ALL" || u.role === roleFilter;
-          const matchSearch =
-            !debouncedSearch ||
-            u.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-            u.email.toLowerCase().includes(debouncedSearch.toLowerCase());
-          return matchRole && matchSearch;
-        });
-        setUsers(filtered);
-        setTotal(filtered.length);
+        setUsers([]);
+        setTotal(0);
       })
       .finally(() => setLoading(false));
   }, [debouncedSearch, roleFilter, page]);
@@ -154,7 +140,7 @@ export default function ManageUsersClient() {
           />
         </div>
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-          {(["ALL", "STUDENT", "FACULTY", "ADMIN"] as const).map((r) => (
+          {(["ALL", UserRole.STUDENT, UserRole.FACULTY, UserRole.ADMIN] as const).map((r) => (
             <button
               key={r}
               onClick={() => setRoleFilter(r)}

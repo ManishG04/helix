@@ -7,7 +7,8 @@ import { LogOut, Menu, X, ChevronDown } from "lucide-react";
 import { clsx } from "clsx";
 import { useAuthStore } from "@/store/authStore";
 import { NAV_ITEMS } from "@/lib/navItems";
-import type { UserRole } from "@/types";
+import { UserRole } from "@/src/api";
+import type { NavItem } from "@/lib/navItems";
 
 const ROLE_LABELS: Record<UserRole, string> = {
   STUDENT: "Student",
@@ -15,12 +16,12 @@ const ROLE_LABELS: Record<UserRole, string> = {
   ADMIN: "Administrator",
 };
 
-function RoleBadgeColor(role: UserRole) {
+function RoleBadgeColor(role: UserRole): string {
   return {
-    STUDENT: "bg-blue-100 text-blue-700",
-    FACULTY: "bg-purple-100 text-purple-700",
-    ADMIN: "bg-orange-100 text-orange-700",
-  }[role];
+    [UserRole.STUDENT]: "bg-blue-100 text-blue-700",
+    [UserRole.FACULTY]: "bg-purple-100 text-purple-700",
+    [UserRole.ADMIN]: "bg-orange-100 text-orange-700",
+  }[role] ?? "";
 }
 
 export default function DashboardLayout({
@@ -39,7 +40,7 @@ export default function DashboardLayout({
     return null;
   }
 
-  const navItems = NAV_ITEMS[user.role] ?? [];
+  const navItems: NavItem[] = user.role ? (NAV_ITEMS[user.role] ?? []) : [];
 
   function handleLogout() {
     logout();
@@ -59,7 +60,7 @@ export default function DashboardLayout({
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="flex flex-col gap-0.5">
-          {navItems.map((item) => {
+          {navItems.map((item: NavItem) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
             return (
@@ -96,10 +97,10 @@ export default function DashboardLayout({
             <span
               className={clsx(
                 "inline-block rounded-full px-1.5 py-0.5 text-xs font-medium",
-                RoleBadgeColor(user.role)
+                user.role ? RoleBadgeColor(user.role) : ""
               )}
             >
-              {ROLE_LABELS[user.role]}
+              {user.role ? ROLE_LABELS[user.role] : ""}
             </span>
           </div>
           <button
@@ -144,7 +145,7 @@ export default function DashboardLayout({
 
           {/* Page title derived from current route */}
           <span className="text-sm font-semibold text-gray-700 lg:ml-0 ml-2">
-            {navItems.find((n) => n.href === pathname)?.label ?? "Dashboard"}
+            {navItems.find((n: NavItem) => n.href === pathname)?.label ?? "Dashboard"}
           </span>
 
           {/* Right side – user chip */}
